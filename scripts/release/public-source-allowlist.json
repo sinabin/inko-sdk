@@ -1,0 +1,65 @@
+{
+  "rootFiles": [
+    ".gitattributes",
+    ".gitignore",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "README.ko.md",
+    "SECURITY.md",
+    "TRADEMARKS.md",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "playwright.config.ts",
+    "svelte.config.js",
+    "tsconfig.app.json",
+    "tsconfig.json",
+    "tsconfig.node.json",
+    "tsconfig.test.json",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ],
+  "prefixes": [
+    ".github/",
+    "public/",
+    "src/",
+    "tests/release/",
+    "tests/unit/"
+  ],
+  "additionalFiles": [
+    "docs/architecture.md",
+    "docs/data-flow.md",
+    "docs/factory-function-pattern.md",
+    "docs/integration-guide.md",
+    "docs/oss/asset-provenance.md",
+    "scripts/block-root-package.mjs",
+    "scripts/build-pkg.mjs",
+    "scripts/check-csp.mjs",
+    "scripts/check-oss-boundary.mjs",
+    "scripts/generate-oss-sample-pdf.py",
+    "tests/e2e/apply-config.spec.ts",
+    "tests/e2e/helpers.ts",
+    "tests/e2e/sdk-roundtrip.spec.ts",
+    "tests/e2e/smoke.spec.ts",
+    "tests/e2e/version-history-mode.spec.ts"
+  ],
+  "additionalPrefixes": [
+    "scripts/release/"
+  ],
+  "excludeFiles": [
+    "src/lib/bridge/androidBridge.ts",
+    "src/lib/bridge/androidBridgeMock.ts",
+    "tests/unit/androidBridge.test.ts",
+    "tests/unit/androidBridgeMock.test.ts",
+    "tests/e2e/sales-evidence.spec.ts"
+  ],
+  "excludePrefixes": [
+    ".claude/",
+    "dist/",
+    "release/",
+    "review/",
+    "tests/e2e-android/"
+  ]
+}

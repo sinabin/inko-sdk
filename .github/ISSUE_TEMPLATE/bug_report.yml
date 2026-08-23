@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible defect in Inko (not an individual support request)
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues are reviewed on a best-effort basis. Filing an issue does not create an SLA, support obligation, or guaranteed response or fix time. Do not attach private PDFs, credentials, personal data, or confidential logs. Report vulnerabilities through private vulnerability reporting instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Inko version or commit
+      placeholder: 1.0.0 or full commit SHA
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and version, OS, iframe hosting model, and relevant CSP/origin settings.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use a synthetic PDF and a minimal host page or public repository.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Data and support boundary
+      options:
+        - label: I used synthetic/redacted material and included no secrets, personal data, or confidential documents.
+          required: true
+        - label: I understand that this issue is not an individual technical-support request and has no guaranteed response time.
+          required: true

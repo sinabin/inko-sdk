@@ -1,0 +1,529 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* ========================================================================
+     Design Tokens — 본 시스템의 시각·인터랙션 결정 근거는 ./design.md 참조
+     컴포넌트는 semantic 토큰만 사용 — primitive 직접 참조 금지
+     ======================================================================== */
+
+  /* === Color Primitives — 실제 색상값 === */
+  --blue-50: #e6f7ff;     /* primary 배경 — 활성 상태 약 */
+  --blue-100: #dbeafe;    /* primary 배경 — 활성 상태 강 */
+  --blue-500: #1890ff;    /* primary — 주요 액션·활성 강조 */
+  --blue-600: #3b82f6;    /* primary alt — 인디케이터 */
+  --blue-700: #2563eb;    /* primary hover dark */
+
+  --green-50: #f0fdf4;
+  --green-100: #dcfce7;
+  --green-200: #bbf7d0;
+  --green-500: #52c41a;   /* save — 저장·완료 */
+  --green-600: #22c55e;
+  --green-700: #16a34a;
+  --green-light: #73d13d; /* save hover */
+
+  --red-500: #ff4d4f;     /* destructive — 삭제·되돌릴 수 없음 */
+  --red-light: #ff7875;   /* destructive hover */
+  --red-error: #ef4444;   /* error 텍스트 */
+  --red-error-bg: #fee2e2;
+
+  --purple-500: #722ed1;  /* history — 이력 패널 */
+  --purple-light: #9254de;
+
+  --gray-50: #f9fafb;
+  --gray-75: #f5f5f5;
+  --gray-100: #f3f4f6;
+  --gray-150: #f0f0f0;
+  --gray-200: #e5e7eb;
+  --gray-250: #e0e0e0;
+  --gray-300: #d1d5db;
+  --gray-350: #dddddd;
+  --gray-400: #cccccc;
+  --gray-450: #bbbbbb;
+  --gray-500: #9ca3af;
+  --gray-550: #999999;
+  --gray-600: #6b7280;
+  --gray-650: #666666;
+  --gray-700: #4b5563;
+  --gray-750: #555555;
+  --gray-800: #374151;
+  --gray-850: #333333;
+  --gray-900: #1f2937;
+
+  --white: #ffffff;
+  --black: #000000;
+
+  --pdf-bg: #525659;      /* PDF 뷰어 다크 배경 — 종이 대비를 위한 고정 색 */
+
+  /* === Semantic Colors — 컴포넌트는 이것만 참조 === */
+  --color-primary: var(--blue-500);
+  --color-primary-hover: #40a9ff;        /* Ant Design primary hover */
+  --color-primary-bg: var(--blue-50);
+  --color-primary-bg-hover: var(--blue-100);
+  --color-primary-strong: var(--blue-600);
+  --color-primary-strong-hover: var(--blue-700);
+
+  --color-action-save: var(--green-500);
+  --color-action-save-hover: var(--green-light);
+  --color-action-save-bg: var(--green-50);
+  --color-action-save-bg-hover: var(--green-100);
+  --color-action-save-bg-active: var(--green-200);
+  --color-action-save-border: var(--green-600);
+  --color-action-save-text: var(--green-700);
+
+  --color-action-destructive: var(--red-500);
+  --color-action-destructive-hover: var(--red-light);
+
+  --color-tool-active: var(--color-primary);
+  --color-tool-active-bg: var(--color-primary-bg);
+  --color-tool-text: var(--gray-750);
+
+  --color-history: var(--purple-500);
+  --color-history-hover: var(--purple-light);
+
+  --color-error: var(--red-error);
+  --color-error-bg: var(--red-error-bg);
+
+  --color-surface: var(--white);
+  --color-surface-subtle: var(--gray-50);
+  --color-surface-muted: var(--gray-75);
+  --color-surface-app: var(--gray-150);            /* 앱 베이스 배경 */
+  --color-surface-thumbnail: var(--gray-200);
+  --color-surface-overlay: rgba(0, 0, 0, 0.3);     /* 모달 backdrop */
+  --color-surface-toast: rgba(0, 0, 0, 0.72);
+  --color-surface-page-bg: var(--pdf-bg);
+
+  --color-text-primary: var(--gray-850);
+  --color-text-secondary: var(--gray-650);
+  --color-text-muted: var(--gray-550);
+  --color-text-subtle: var(--gray-600);
+  --color-text-strong: var(--gray-900);
+  --color-text-label: var(--gray-800);
+  --color-text-tool: var(--color-tool-text);
+  --color-text-inverse: var(--white);
+
+  --color-border-light: var(--gray-200);
+  --color-border-muted: var(--gray-300);
+  --color-border-subtle: var(--gray-350);
+  --color-border-strong: var(--gray-400);
+  --color-border-divider: var(--gray-500);   /* 사이드바·강한 분리선·스크롤바 thumb */
+
+  /* === Spacing — 8px 기반 + 4/6px 보조 === */
+  --space-0: 0;
+  --space-0_5: 2px;
+  --space-1: 4px;
+  --space-1_5: 6px;
+  --space-2: 8px;
+  --space-2_5: 10px;
+  --space-3: 12px;
+  --space-3_5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* === Radius === */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 20px;
+  --radius-full: 9999px;
+
+  /* === Typography Scale === */
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 48px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+
+  /* === Shadow === */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-page: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-focus-ring: 0 0 0 2px var(--color-primary);
+  --shadow-focus-soft: 0 0 0 2px rgba(24, 144, 255, 0.2);
+  --shadow-tool-active: 0 2px 8px rgba(24, 144, 255, 0.28);   /* 활성 도구 halo */
+  --shadow-save-action: 0 1px 3px rgba(82, 196, 26, 0.32);    /* 1차 액션(저장) 강조 */
+  --shadow-save-action-hover: 0 4px 10px rgba(82, 196, 26, 0.38);
+  --shadow-history-action: 0 1px 3px rgba(114, 46, 209, 0.28);/* 이력(2차 액션) */
+
+  /* === Liquid Glass — 떠 있는 surface 전용 (overlay·popover·primary action 한정) ===
+     원칙: 컨텐츠 위에 "떠 있다"는 위계만 표현. 메인 컨테이너·항상 보이는 영역에는 적용 금지.
+     성능: backdrop-filter는 작은 surface에만 — fast scroll 영향 최소화.
+     접근성: prefers-reduced-transparency reduce 시 솔리드 fallback (블록 하단 참조).
+     색감: 순백 대신 --bg-app-gradient의 azure tint(#dbecfb=rgb(219,236,251))를 입혀
+     PDF(흰색) 위에서도 미세한 푸른 광택이 살아 공공기관 분위기 일관 유지. */
+  --glass-bg-light: transparent;     /* 색 입히지 않음 — backdrop-filter blur가 frost로 분리감 담당 */
+  --glass-bg-strong: transparent;    /* 색 입히지 않음 — blur·border·shadow로만 위계 표현 */
+  --glass-border: rgba(255, 255, 255, 0.55);       /* hairline — 순백으로 specular 효과 유지 */
+  --glass-border-subtle: rgba(255, 255, 255, 0.28);
+  --glass-blur: 22px;                              /* surface 블러 강도 */
+  --glass-blur-button: 10px;                       /* 버튼 — 가벼운 블러 */
+  --glass-saturate: 135%;                          /* 색감 살리되 chromatic 색번짐(엣지 분홍·녹색 halo) 절제 */
+
+  /* 액션 컬러를 입힌 tinted glass — 1차 액션(저장)·2차 액션(이력) */
+  --glass-bg-save: rgba(82, 196, 26, 0.78);        /* save tint */
+  --glass-bg-save-hover: rgba(115, 209, 61, 0.85);
+  --glass-bg-history: rgba(219, 236, 251, 0.55);   /* 이력 비활성 — azure light glass + 보라 hairline */
+  --glass-bg-history-hover: rgba(146, 84, 222, 0.18);
+  --glass-bg-history-active: rgba(114, 46, 209, 0.78);
+
+  /* 상단 광택(inner gloss) + 측면 미세 굴절 — Apple Liquid Glass 모방 */
+  --glass-gloss-top: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  --glass-gloss-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  --glass-gloss: var(--glass-gloss-top), var(--glass-gloss-edge);
+
+  /* glass 외부 그림자 — depth 계조 */
+  --shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-glass-button: 0 4px 14px rgba(0, 0, 0, 0.12);
+  --shadow-glass-toolbar: 0 1px 0 rgba(255, 255, 255, 0.65) inset, 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* 툴바·사이드바 — 색을 입히지 않은 완전 투명. backdrop-filter blur·border·shadow만으로 frost·위계 형성.
+     버튼·액션 컬러가 시각 위계를 담당하므로 컨테이너는 색을 완전히 양보 — Apple 시스템 메뉴바 톤 참조 */
+  --glass-bg-toolbar: transparent;
+  --glass-blur-toolbar: 28px;
+
+  --glass-bg-sidebar: transparent;
+  --glass-blur-sidebar: 24px;
+
+  /* 앱 베이스 — 색감 제거한 중립 light gray 그라데이션.
+     투명 glass 컨테이너(툴바·사이드바·패널)가 위에서 이 톤을 받아도 색감이 묻어나지 않도록 무채색 유지.
+     시각 위계는 액션 버튼 컬러가 담당, 컨테이너는 색을 양보 (Apple Big Sur 데스크톱 톤 참조) */
+  --bg-app-gradient: linear-gradient(180deg,
+    #f6f7f8 0%,    /* 상단 — 거의 흰색 */
+    #eef0f2 50%,
+    #e7eaec 100%   /* 하단 — soft neutral gray */
+  );
+
+  /* 툴바 내부 버튼 — azure tint + gloss로 "유리 위 칩" 느낌. 액션 컬러(green/purple)가 더 또렷하게 분리되도록 비활성 칩은 투명도 우선 */
+  --glass-bg-btn: rgba(219, 236, 251, 0.42);
+  --glass-bg-btn-hover: rgba(219, 236, 251, 0.68);
+  --glass-bg-btn-active: rgba(219, 236, 251, 0.85);
+  --glass-border-btn: rgba(255, 255, 255, 0.55);
+
+  /* === Motion — 의미 기반 duration·easing === */
+  --motion-fast: 150ms;        /* 즉각 피드백 — 호버·탭·색 변경 */
+  --motion-base: 200ms;        /* 상태 전환 — 모달·도구 전환 */
+  --motion-slow: 320ms;        /* 공간 이동 — 사이드바·페이지 */
+  --motion-toast: 3000ms;      /* ToolHint 전체 라이프사이클 */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.5, 1.5, 0.5, 1);
+
+  /* === Z-index 위계 (PDF·오버레이·Paper.js·UI 패널) === */
+  --z-pdf: 10;
+  --z-overlay: 20;
+  --z-paper: 30;
+  --z-history-panel: 990;       /* 우측 이력 패널 — 시트보다 아래 */
+  --z-text-modal-backdrop: 1000;/* 텍스트 입력 모달 backdrop */
+  --z-text-modal: 1001;         /* 텍스트 입력 모달 본체 */
+  --z-sheet-backdrop: 1010;     /* 도구 옵션 시트 backdrop */
+  --z-sheet: 1020;              /* 도구 옵션 시트 본체 — 모든 패널 위 */
+
+  /* === Safe area insets for notch/cutout devices === */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  color: var(--color-text-primary);
+  /* 앱 루트는 색을 입히지 않음 — 임베드 환경의 부모 배경(또는 브라우저 기본)이 그대로 노출 */
+  background-color: transparent;
+}
+
+/* prefers-reduced-motion: 모션 토큰을 즉시로 강제해 전체 자동 대응 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}
+
+/* 빠른 스크롤(>1500px/s) 중 backdrop-filter 비활성화 — design.md §3.5·§5.4 의무.
+   PdfScrollViewer가 scrollMode.isScrollingFast 신호를 받아 root에 .fast-scrolling 클래스 부착.
+   동시 다중 blur 갱신이 60fps를 위협하지 않도록 솔리드로 강제 전환 후 idle 시 자동 복귀.
+   gloss·shadow는 정적 효과라 그대로 둠 — 매 프레임 갱신이 필요 없음. */
+html.fast-scrolling .toolbar,
+html.fast-scrolling .thumbnail-sidebar,
+html.fast-scrolling .pen-sheet,
+html.fast-scrolling .user-canvas-data-list,
+html.fast-scrolling .save-btn,
+html.fast-scrolling .history-btn {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* prefers-reduced-transparency: glass 토큰을 솔리드로 강제 (Safari 17+, Chromium 110+).
+   투명 배경이 가독성·집중을 해치는 사용자에게는 불투명 surface로 동등한 위계 제공 */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-bg-light: var(--color-surface);
+    --glass-bg-strong: var(--color-surface);
+    --glass-border: var(--color-border-light);
+    --glass-border-subtle: var(--color-border-light);
+    --glass-blur: 0px;
+    --glass-blur-button: 0px;
+    --glass-saturate: 100%;
+    --glass-bg-save: var(--color-action-save);
+    --glass-bg-save-hover: var(--color-action-save-hover);
+    --glass-bg-history: var(--color-surface);
+    --glass-bg-history-hover: var(--color-primary-bg-hover);
+    --glass-bg-history-active: var(--color-history);
+    --glass-gloss-top: none;
+    --glass-gloss-edge: none;
+    --glass-gloss: none;
+    --shadow-glass: var(--shadow-overlay);
+    --shadow-glass-button: var(--shadow-sm);
+    --shadow-glass-toolbar: none;
+    --glass-bg-toolbar: var(--color-surface-muted);
+    --glass-blur-toolbar: 0px;
+    --glass-bg-btn: var(--color-surface);
+    --glass-bg-btn-hover: var(--gray-250);
+    --glass-bg-btn-active: var(--gray-300);
+    --glass-border-btn: var(--color-border-strong);
+    --glass-bg-sidebar: var(--color-surface-thumbnail);
+    --glass-blur-sidebar: 0px;
+    --bg-app-gradient: var(--gray-150);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* Prevent rubber band scrolling on iOS */
+  overscroll-behavior: none;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ===== Scrollbar styling (Galaxy Tab touch-friendly) ===== */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-400);
+  border-radius: var(--space-1_5);
+  border: 2px solid #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
+}
+
+/* ===== Touch optimization (Galaxy Tab 기본값) ===== */
+button {
+  min-height: 48px;
+  min-width: 48px;
+  touch-action: manipulation;
+}
+
+/* ===== Galaxy Tab S9 FE+ Optimization ===== */
+/* Target: 2560x1600, 12.4 inch display */
+
+/* GPU acceleration for scroll containers */
+.scroll-viewer {
+  transform: translateZ(0);
+  will-change: scroll-position;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Layout containment for page containers */
+.scroll-page-container {
+  contain: layout style paint;
+}
+
+/* 터치 스크롤 최적화 */
+.scroll-viewer:not(.editing-active) {
+  touch-action: pan-y pan-x !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+}
+
+/* Editing mode - Paper.js handles all touch events */
+.scroll-viewer.editing-active {
+  touch-action: none !important;
+  -webkit-overflow-scrolling: auto;
+}
+
+/* Canvas rendering optimization */
+.scroll-page-canvas-pdf,
+.scroll-page-canvas-paper {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Prevent text selection during drawing */
+.scroll-page-canvas-paper {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* ===== Performance optimizations ===== */
+
+/* Reduce paint operations */
+.pdf-viewer-container {
+  isolation: isolate;
+}
+
+/* Optimize compositing layers */
+.toolbar,
+.scroll-viewer,
+.scroll-content {
+  will-change: auto;
+}
+
+/* Reduce layout thrashing */
+.scroll-page-container {
+  transform: translateZ(0);
+}
+
+/* ===== Accessibility ===== */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --color-border-subtle: var(--black);
+    --color-border-strong: var(--black);
+    --color-text-primary: var(--black);
+    --color-surface: var(--white);
+    /* 고대비에서는 glass도 솔리드로 — 반투명이 명도차 흐림 */
+    --glass-bg-light: var(--white);
+    --glass-bg-strong: var(--white);
+    --glass-border: var(--black);
+    --glass-blur: 0px;
+    --glass-blur-button: 0px;
+    --glass-saturate: 100%;
+    --glass-gloss: none;
+    --glass-bg-toolbar: var(--white);
+    --glass-blur-toolbar: 0px;
+    --glass-bg-btn: var(--white);
+    --glass-bg-btn-hover: var(--gray-250);
+    --glass-bg-btn-active: var(--gray-300);
+    --glass-border-btn: var(--black);
+    --shadow-glass-toolbar: none;
+    --glass-bg-sidebar: var(--white);
+    --glass-blur-sidebar: 0px;
+    --bg-app-gradient: var(--white);
+  }
+
+  .toolbar {
+    border-bottom: 2px solid var(--color-border-strong);
+  }
+
+  button {
+    border: 2px solid var(--color-border-strong);
+  }
+}
+
+/* Reduced motion: 추가 안전망 — 토큰을 우회하는 inline transition까지 차단 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== Print styles ===== */
+@media print {
+  .toolbar,
+  .user-canvas-data-list {
+    display: none !important;
+  }
+
+  .pdf-viewer-container {
+    height: auto;
+    overflow: visible;
+  }
+
+  .scroll-viewer {
+    height: auto;
+    overflow: visible;
+  }
+
+  .scroll-page-container {
+    page-break-after: always;
+    break-after: page;
+  }
+}
+
+/* ===== Landscape mode optimization ===== */
+@media (orientation: landscape) {
+  /* Compact toolbar in landscape on smaller devices */
+  .toolbar {
+    padding: var(--space-1) var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .toolbar button {
+    min-height: 36px;
+    min-width: 36px;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .toolbar .page-input {
+    width: 40px;
+    padding: var(--space-0_5);
+  }
+}
+
+/* Portrait mode: compact toolbar */
+@media (orientation: portrait) {
+  .toolbar {
+    padding: var(--space-1_5) var(--space-3);
+    gap: var(--space-2);
+  }
+}

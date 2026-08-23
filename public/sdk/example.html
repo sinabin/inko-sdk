@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inko SDK 통합 예제</title>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", sans-serif; }
+    body { display: flex; flex-direction: column; }
+    header {
+      padding: 12px 16px; background: #0d1b3e; color: #fff;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    header h1 { font-size: 14px; margin: 0 16px 0 0; font-weight: 600; }
+    header button, header label.file {
+      background: #26375d; color: #fff; border: 0; padding: 6px 12px;
+      border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    header button:hover, header label.file:hover { background: #354b7d; }
+    header input[type=file] { display: none; }
+    header .status { margin-left: auto; font-size: 12px; opacity: 0.8; }
+    #viewer { flex: 1; min-height: 0; }
+    #log {
+      max-height: 120px; overflow: auto; padding: 8px 12px;
+      background: #f3f4f6; border-top: 1px solid #d1d5db;
+      font-family: ui-monospace, monospace; font-size: 11px; white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Inko SDK 예제</h1>
+    <button id="btn-load-url">샘플 PDF 다시 열기</button>
+    <label class="file">
+      로컬 PDF 선택
+      <input type="file" id="file-input" accept="application/pdf">
+    </label>
+    <button id="btn-save">편집 상태 저장</button>
+    <button id="btn-clear">현재 페이지 편집 지우기</button>
+    <span class="status" id="status">초기화 중…</span>
+  </header>
+
+  <div id="viewer"></div>
+  <pre id="log"></pre>
+
+  <script src="/pdfv/sdk/pdfv-sdk.js"></script>
+  <script>
+    var samplePdf = '/pdfv/samples/inko-demo.pdf';
+    var logEl = document.getElementById('log');
+    var statusEl = document.getElementById('status');
+    function log(message) {
+      var line = '[' + new Date().toISOString().slice(11, 19) + '] ' + message;
+      logEl.textContent = line + '\n' + logEl.textContent;
+    }
+    function setStatus(message) { statusEl.textContent = message; }
+
+    // 저장소 예시입니다. 실제 앱에서는 서버나 브라우저 저장소로 교체하세요.
+    var savedState = '';
+
+    var viewer = Inko.mount('#viewer', {
+      src: '/pdfv/index.html',
+      pdfUrl: samplePdf,
+      fileName: 'inko-demo.pdf',
+      readOnly: false,
+      initialCanvasData: savedState || undefined,
+      onReady: function () {
+        setStatus('뷰어 준비 완료');
+        log('viewerReady');
+      },
+      onPdfLoaded: function () {
+        setStatus('PDF 로드 완료');
+        log('pdfLoaded');
+      },
+      onChange: function (canvasData) {
+        log('canvasDataChanged (' + canvasData.length + ' bytes)');
+      },
+      onSave: function (canvasData, ok, message) {
+        if (!ok) {
+          setStatus('저장 실패');
+          log('saveCanvasResponse: ' + message);
+          return;
+        }
+        savedState = canvasData;
+        setStatus('편집 상태 저장됨');
+        log('saveCanvasResponse (' + canvasData.length + ' bytes)');
+      },
+      onClose: function () {
+        log('closeViewer');
+      },
+      onError: function (error) {
+        log('SDK error: ' + (error && error.message ? error.message : error));
+      },
+    });
+
+    document.getElementById('btn-load-url').addEventListener('click', function () {
+      viewer.loadPdfUrl(samplePdf, 'inko-demo.pdf', savedState || undefined);
+    });
+
+    document.getElementById('file-input').addEventListener('change', function (event) {
+      var file = event.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var base64 = reader.result.split(',')[1];
+        viewer.loadPdfBase64(base64, file.name, savedState || undefined, false);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('btn-save').addEventListener('click', function () {
+      viewer.save();
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', function () {
+      viewer.clear();
+    });
+
+    window.addEventListener('beforeunload', function () {
+      viewer.destroy();
+    });
+
+    window.__inkoDemo = {
+      get savedState() { return savedState; },
+      viewer: viewer,
+    };
+  </script>
+</body>
+</html>

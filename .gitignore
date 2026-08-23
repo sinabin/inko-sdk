@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+/release/
+*.tgz
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+blob-report/
+.vite/
+# Playwright outputs (regenerated each run)
+tests/e2e/.results/
+tests/e2e/report/
+tests/e2e/screenshots/
+
+# IDE
+.idea/
+.vscode/
+
+# Local Claude settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

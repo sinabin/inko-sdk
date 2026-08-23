@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Developer documentation
+    url: https://nexth.co.kr/inko/docs/overview
+    about: Read the self-service integration and API documentation.
+  - name: Security vulnerability
+    url: https://github.com/sinabin/inko-sdk/security/advisories/new
+    about: Report suspected vulnerabilities privately. Do not open a public issue.

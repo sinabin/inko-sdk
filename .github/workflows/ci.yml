@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan full history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.12'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify public-source boundary
+        run: node scripts/release/verify-public-tree.mjs
+
+      - name: Audit high-severity dependency findings
+        run: |
+          npm audit --audit-level=high
+          npm audit signatures
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run static checks
+        run: npm run check
+
+      - name: Verify reproducible production build
+        shell: bash
+        run: |
+          npm run build
+          node scripts/release/hash-tree.mjs dist > dist-first.sha256
+          rm -rf dist
+          npm run build
+          node scripts/release/hash-tree.mjs dist > dist-second.sha256
+          diff -u dist-first.sha256 dist-second.sha256
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and verify npm release candidate
+        shell: bash
+        run: |
+          npm run build:pkg
+          node scripts/release/verify-release-package.mjs release
+          mapfile -t ARCHIVES < <(find . -maxdepth 1 -type f -name '*.tgz' -printf '%f\n')
+          test "${#ARCHIVES[@]}" -eq 1
+          node tests/release/verify-installed-tarball.mjs "${ARCHIVES[0]}" --expect-public
+          npm pack --dry-run --json ./release > npm-pack-dry-run.json
+
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --omit=dev --sbom-format=cyclonedx --sbom-type=application > sbom.cdx.json
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inko-ci-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dist-first.sha256
+            dist-second.sha256
+            npm-pack-dry-run.json
+            sbom.cdx.json

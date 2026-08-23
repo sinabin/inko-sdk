@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (must equal v<package version>)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: inko-public-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: release
+
+    steps:
+      - name: Check out the requested tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Scan full history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.12'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use a provenance-capable npm CLI
+        run: npm install --global npm@latest
+
+      - name: Verify tag and package version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$VERSION"
+          test "$(git tag --points-at HEAD --list "$RELEASE_TAG")" = "$RELEASE_TAG"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify public-source boundary
+        run: node scripts/release/verify-public-tree.mjs
+
+      - name: Audit high-severity dependency findings
+        run: |
+          npm audit --audit-level=high
+          npm audit signatures
+
+      - name: Run unit and static checks
+        run: |
+          npm test
+          npm run check
+
+      - name: Verify reproducible production build
+        shell: bash
+        run: |
+          npm run build
+          node scripts/release/hash-tree.mjs dist > dist-first.sha256
+          rm -rf dist
+          npm run build
+          node scripts/release/hash-tree.mjs dist > dist-second.sha256
+          diff -u dist-first.sha256 dist-second.sha256
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and verify release package
+        run: |
+          npm run build:pkg
+          node scripts/release/verify-release-package.mjs release
+
+      - name: Locate the single release archive
+        id: artifact
+        shell: bash
+        run: |
+          mapfile -t ARCHIVES < <(find . -maxdepth 1 -type f -name '*.tgz' -printf '%f\n')
+          test "${#ARCHIVES[@]}" -eq 1
+          echo "tarball=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
+          echo "sbom=inko-${{ inputs.tag }}.sbom.cdx.json" >> "$GITHUB_OUTPUT"
+
+      - name: Verify clean installation and browser round trip
+        run: >-
+          node tests/release/verify-installed-tarball.mjs
+          "${{ steps.artifact.outputs.tarball }}"
+          --expect-public
+
+      - name: Generate SBOM and checksums
+        shell: bash
+        env:
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+          SBOM: ${{ steps.artifact.outputs.sbom }}
+        run: |
+          npm sbom --omit=dev --sbom-format=cyclonedx --sbom-type=application > "$SBOM"
+          sha256sum "$TARBALL" "$SBOM" > SHA256SUMS
+
+      - name: Attest package and SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.artifact.outputs.tarball }}
+          sbom-path: ${{ steps.artifact.outputs.sbom }}
+
+      - name: Check whether this version is already on npm
+        id: npm_state
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "inko-pdf-sdk@$VERSION" version --json >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish package to npm with provenance
+        if: steps.npm_state.outputs.published != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish "${{ steps.artifact.outputs.tarball }}" --access public --provenance
+
+      - name: Create GitHub release from the same artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+          SBOM: ${{ steps.artifact.outputs.sbom }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          "$TARBALL" "$SBOM" SHA256SUMS
+          --verify-tag
+          --title "Inko $RELEASE_TAG"
+          --generate-notes
+
+      - name: Preserve release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inko-release-${{ inputs.tag }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            *.tgz
+            *.sbom.cdx.json
+            SHA256SUMS
+            dist-first.sha256
+            dist-second.sha256
