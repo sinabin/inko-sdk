@@ -902,7 +902,11 @@
         canvasData: candidate.canvasData,
         enabled: candidate.enabled === true,
         color: typeof candidate.color === 'string' ? candidate.color : '',
-        registeredAt: typeof candidate.registeredAt === 'string' ? candidate.registeredAt : undefined,
+        registeredAt: typeof candidate.registeredAt === 'string' && candidate.registeredAt.trim()
+          ? candidate.registeredAt
+          : typeof candidate.regDt === 'string' && candidate.regDt.trim()
+            ? candidate.regDt
+            : undefined,
         isCurrent: candidate.isCurrent === true
       })
     })

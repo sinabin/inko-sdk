@@ -84,6 +84,9 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Run browser E2E regression suite
+        run: npm run test:e2e
+
       - name: Build and verify release package
         run: |
           npm run build:pkg

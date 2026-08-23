@@ -10,6 +10,8 @@ export interface UserCanvasEntry {
   isCurrent?: boolean;
   /** ISO or yyyy-MM-dd HH:mm:ss timestamp shown in the history panel. */
   registeredAt?: string;
+  /** @deprecated Legacy alias accepted for compatibility. Use registeredAt. */
+  regDt?: string;
   [key: string]: unknown;
 }
 

@@ -160,6 +160,9 @@ const viewer = Inko.mount('#inko', {
 `canvasData` 인자로 함께 복원해야 합니다. `isCurrent`를 넣지 않은 목록은 기존
 검토본 레이어 모드로 유지되어 여러 항목을 동시에 켤 수 있습니다.
 
+등록 시각은 `registeredAt`을 사용합니다. 이전 연동의 `regDt`도 읽기 호환으로
+받지만 새 코드에서는 `registeredAt`으로 전환하세요.
+
 ## 배포 보안
 
 - 운영 환경은 HTTPS를 사용합니다.

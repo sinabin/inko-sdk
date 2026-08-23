@@ -262,7 +262,7 @@
        * 이력 패널 항목을 교체한다.
        * isCurrent가 없으면 협업·리뷰용 복수 레이어, 하나에 true면 정확히 하나를 고르는 버전 이력.
        * 현재 편집 상태 복원은 별도로 mount의 initialCanvasData 또는 loadPdf*로 처리한다.
-       * @param {Array<{canvasId, userName, canvasData, enabled?, isCurrent?, registeredAt?, ...}>} list
+       * @param {Array<{canvasId, userName, canvasData, enabled?, isCurrent?, registeredAt?, regDt?, ...}>} list
        */
       loadUserCanvasOverlay: function (list) {
         send(MSG.LOAD_USER_CANVAS, Array.isArray(list) ? list : []);

@@ -28,6 +28,8 @@
     onClose
   }: Props = $props()
 
+  let listElement = $state<HTMLUListElement | null>(null)
+
   /** Safari/WebView 호환 날짜 파싱 (yyyy-MM-dd HH:mm:ss → ISO 형식 변환) */
   function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return '-'
@@ -52,17 +54,32 @@
     })
   }
 
-  /** 카드 전체 클릭 = 보이기/숨기기 토글. 부모(PdfViewer)가 단일 선택 정책 적용 */
-  function handleCardToggle(canvasId: string, currentVisible: boolean): void {
-    onToggleVisibility?.(canvasId, !currentVisible)
+  /** 버전은 항상 선택 요청, 협업 레이어는 기존처럼 보이기/숨기기 토글. */
+  function handleCardSelect(canvasId: string, currentVisible: boolean): void {
+    onToggleVisibility?.(canvasId, isVersionHistoryMode ? true : !currentVisible)
   }
 
-  /** 키보드 a11y — Enter/Space로도 토글 */
-  function handleCardKeydown(event: KeyboardEvent, canvasId: string, currentVisible: boolean): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      handleCardToggle(canvasId, currentVisible)
+  /** 라디오 키보드 패턴 — 방향키는 순환, Home/End는 처음/끝으로 이동하며 즉시 선택. */
+  function handleVersionKeydown(event: KeyboardEvent, index: number): void {
+    if (!isVersionHistoryMode || userCanvasData.length === 0) return
+
+    const lastIndex = userCanvasData.length - 1
+    let nextIndex: number | null = null
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = index === lastIndex ? 0 : index + 1
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = index === 0 ? lastIndex : index - 1
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = lastIndex
     }
+
+    if (nextIndex === null) return
+    event.preventDefault()
+    const target = userCanvasData[nextIndex]
+    onToggleVisibility?.(target.canvasId, true)
+    listElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextIndex]?.focus()
   }
 
   /** 이력을 편집 캔버스에 불러오기 — 카드 토글로 전파되지 않도록 stopPropagation */
@@ -89,51 +106,60 @@
         <p>{t('history.empty')}</p>
       </div>
     {:else}
-      <ul class="list-content" role={isVersionHistoryMode ? 'radiogroup' : undefined}>
-        {#each userCanvasData as data (data.canvasId)}
+      <ul
+        class="list-content"
+        role={isVersionHistoryMode ? 'radiogroup' : undefined}
+        aria-label={isVersionHistoryMode ? t('history.title') : undefined}
+        bind:this={listElement}
+      >
+        {#each userCanvasData as data, index (data.canvasId)}
           {@const visible = data.enabled ?? false}
           {@const isCurrent = !!currentEditCanvasId && data.canvasId === currentEditCanvasId}
           {@const showAsCurrent = isVersionHistoryMode && isCurrent && visible}
 
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
           <li
             class="list-item"
             class:enabled={visible && !showAsCurrent}
             class:current={showAsCurrent}
-            role={isVersionHistoryMode ? 'radio' : 'button'}
-            tabindex="0"
-            aria-checked={isVersionHistoryMode ? visible : undefined}
-            aria-pressed={isVersionHistoryMode ? undefined : visible}
-            aria-label={isVersionHistoryMode ? data.userName : (visible ? t('history.hideUser', { name: data.userName }) : t('history.showUser', { name: data.userName }))}
-            onclick={() => handleCardToggle(data.canvasId, visible)}
-            onkeydown={(e) => handleCardKeydown(e, data.canvasId, visible)}
           >
-            <div class="item-header">
-              <span class="visibility-indicator" class:visible aria-hidden="true">
-                {#if visible}
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="8" cy="8" r="6.5" fill="currentColor" stroke="none"/>
-                    <polyline points="5 8.4 7.2 10.6 11 6.2" stroke="#fff"/>
-                  </svg>
-                {:else}
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <circle cx="8" cy="8" r="6.5"/>
-                  </svg>
+            <button
+              type="button"
+              class="item-select"
+              role={isVersionHistoryMode ? 'radio' : undefined}
+              tabindex={isVersionHistoryMode ? (visible ? 0 : -1) : 0}
+              aria-checked={isVersionHistoryMode ? visible : undefined}
+              aria-pressed={isVersionHistoryMode ? undefined : visible}
+              aria-label={isVersionHistoryMode ? data.userName : (visible ? t('history.hideUser', { name: data.userName }) : t('history.showUser', { name: data.userName }))}
+              onclick={() => handleCardSelect(data.canvasId, visible)}
+              onkeydown={(event) => handleVersionKeydown(event, index)}
+            >
+              <div class="item-header">
+                <span class="visibility-indicator" class:visible aria-hidden="true">
+                  {#if visible}
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="8" cy="8" r="6.5" fill="currentColor" stroke="none"/>
+                      <polyline points="5 8.4 7.2 10.6 11 6.2" stroke="#fff"/>
+                    </svg>
+                  {:else}
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
+                      <circle cx="8" cy="8" r="6.5"/>
+                    </svg>
+                  {/if}
+                </span>
+                <strong class="user-name">
+                  {data.userName || t('history.unknownUser')}
+                </strong>
+                {#if data.userId}
+                  <span class="user-id-chip">{data.userId}</span>
                 {/if}
-              </span>
-              <strong class="user-name">
-                {data.userName || t('history.unknownUser')}
-              </strong>
-              {#if data.userId}
-                <span class="user-id-chip">{data.userId}</span>
-              {/if}
-            </div>
+              </div>
 
-            <div class="item-meta">
-              <small class="created-date">
-                {formatDate(data.registeredAt)}
-              </small>
-            </div>
+              <div class="item-meta">
+                <small class="created-date">
+                  {formatDate(data.registeredAt)}
+                </small>
+              </div>
+            </button>
 
             {#if !isReadOnly && !isCurrent}
               <div class="item-actions">
@@ -243,10 +269,21 @@
   }
 
   .list-item {
-    padding: var(--space-3_5) var(--space-5);
     border-bottom: 1px solid var(--color-border-light);
-    cursor: pointer;
     transition: background-color var(--motion-base) var(--ease-out);
+  }
+
+  .item-select {
+    display: block;
+    width: 100%;
+    padding: var(--space-3_5) var(--space-5);
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
   }
 
   .list-item:hover {
@@ -270,6 +307,9 @@
   .list-item.current {
     background-color: var(--blue-100);
     border-left: 3px solid var(--color-primary-strong);
+  }
+
+  .list-item.current .item-select {
     cursor: default;
   }
 
@@ -333,7 +373,8 @@
   }
 
   .item-actions {
-    margin-left: 26px;
+    margin-left: calc(var(--space-5) + 26px);
+    padding-bottom: var(--space-3_5);
     display: flex;
     gap: var(--space-2);
   }
@@ -365,8 +406,8 @@
     box-shadow: var(--shadow-save-action);
   }
 
-  /* 카드 자체가 토글 버튼 — 키보드 포커스 ring */
-  .list-item:focus-visible {
+  /* 선택 버튼 키보드 포커스 ring */
+  .item-select:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: -2px;
   }
