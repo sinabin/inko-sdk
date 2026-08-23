@@ -44,7 +44,7 @@ jobs:
           package-manager-cache: false
 
       - name: Use a provenance-capable npm CLI
-        run: npm install --global npm@latest
+        run: npm install --global npm@11.6.2
 
       - name: Verify tag and package version
         shell: bash
