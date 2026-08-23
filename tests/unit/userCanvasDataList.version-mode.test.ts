@@ -132,7 +132,10 @@ describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
   it('라디오 구조는 roving tabindex와 방향키·Home·End 이동을 지원한다', () => {
     const onToggleVisibility = vi.fn()
     const el = render({
-      userCanvasData: [makeItem('v2', { enabled: true }), makeItem('v1')],
+      userCanvasData: [
+        makeItem('v2', { enabled: true, userName: '나' }),
+        makeItem('v1', { userName: '나' })
+      ],
       isVisible: true,
       currentEditCanvasId: 'v2',
       isVersionHistoryMode: true,
@@ -147,6 +150,9 @@ describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
     expect(el.querySelectorAll('[role="radio"][tabindex="-1"]')).toHaveLength(1)
     expect(radios[0].querySelector('.load-btn')).toBeNull()
     expect(radios[1].querySelector('.load-btn')).toBeNull()
+    expect(radios[0].getAttribute('aria-label')).toContain('1/2')
+    expect(radios[1].getAttribute('aria-label')).toContain('2/2')
+    expect(radios[0].getAttribute('aria-label')).not.toBe(radios[1].getAttribute('aria-label'))
 
     radios[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     expect(onToggleVisibility).toHaveBeenLastCalledWith('v1', true)

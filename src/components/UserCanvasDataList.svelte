@@ -54,6 +54,18 @@
     })
   }
 
+  /** 같은 작성자의 여러 버전도 보조기술에서 서로 구분할 수 있도록 시각 정보와 순번을 함께 제공. */
+  function getSelectionLabel(data: UserCanvasInfo, index: number, visible: boolean): string {
+    const name = data.userName || t('history.unknownUser')
+    if (!isVersionHistoryMode) {
+      return visible ? t('history.hideUser', { name }) : t('history.showUser', { name })
+    }
+
+    const date = formatDate(data.registeredAt)
+    const position = `${index + 1}/${userCanvasData.length}`
+    return date === '-' ? `${name}, ${position}` : `${name}, ${date}, ${position}`
+  }
+
   /** 버전은 항상 선택 요청, 협업 레이어는 기존처럼 보이기/숨기기 토글. */
   function handleCardSelect(canvasId: string, currentVisible: boolean): void {
     onToggleVisibility?.(canvasId, isVersionHistoryMode ? true : !currentVisible)
@@ -129,7 +141,7 @@
               tabindex={isVersionHistoryMode ? (visible ? 0 : -1) : 0}
               aria-checked={isVersionHistoryMode ? visible : undefined}
               aria-pressed={isVersionHistoryMode ? undefined : visible}
-              aria-label={isVersionHistoryMode ? data.userName : (visible ? t('history.hideUser', { name: data.userName }) : t('history.showUser', { name: data.userName }))}
+              aria-label={getSelectionLabel(data, index, visible)}
               onclick={() => handleCardSelect(data.canvasId, visible)}
               onkeydown={(event) => handleVersionKeydown(event, index)}
             >
