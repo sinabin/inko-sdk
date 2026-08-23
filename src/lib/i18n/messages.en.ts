@@ -30,10 +30,8 @@ export const en: Record<string, string> = {
   // History panel
   'history.title': 'History',
   'history.empty': 'No history yet.',
-  'history.editing': 'Editing',
   'history.continueEdit': 'Continue editing',
   'history.unknownUser': 'Unknown',
-  'history.editingCurrent': '{name} — currently editing',
   'history.hideUser': 'Hide {name}',
   'history.showUser': 'Show {name}',
 

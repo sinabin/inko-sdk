@@ -20,6 +20,7 @@ to make the implementation and its limits directly verifiable.
 - Pen, highlighter, eraser, text, shape, selection, zoom, and thumbnail tools
 - Editable state export and restoration through `canvasData`
 - Review-state overlays through `loadUserCanvasOverlay()`
+- Exactly-one version-history selection when one overlay entry declares `isCurrent: true`
 - A browser/iframe SDK exposed through `Inko.mount()`
 - Theme, tool, and Korean/English UI configuration
 
@@ -124,7 +125,7 @@ npm audit signatures
 GitHub build attestations can also be verified with:
 
 ```bash
-gh attestation verify inko-pdf-sdk-1.0.0.tgz --repo sinabin/inko-sdk
+gh attestation verify inko-pdf-sdk-1.0.1.tgz --repo sinabin/inko-sdk
 ```
 
 ## Documentation

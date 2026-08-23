@@ -130,6 +130,36 @@ viewer.loadUserCanvasOverlay([
 레이어 목록과 표시 여부는 UI 편의를 위한 값입니다. 사용자 신원과 열람 권한은
 신뢰할 수 있는 서버에서 확인하세요.
 
+## 버전 이력 선택
+
+같은 문서의 시점별 저장본을 전달할 때 현재 편집 기준점 하나에
+`isCurrent: true`를 지정하면 버전 이력 모드가 됩니다. 이 모드에서는 최신 항목이
+처음부터 선택되고, 사용자는 한 번에 정확히 한 버전만 선택할 수 있습니다.
+
+```javascript
+const versions = await loadVersionsNewestFirst()
+
+const viewer = Inko.mount('#inko', {
+  src: '/assets/inko/viewer/index.html',
+  pdfUrl: '/documents/report.pdf',
+  initialCanvasData: versions[0]?.canvasData,
+  onPdfLoaded() {
+    viewer.loadUserCanvasOverlay(versions.map((version, index) => ({
+      canvasId: String(version.id),
+      userName: version.userName,
+      canvasData: version.canvasData,
+      registeredAt: version.createdAt,
+      isCurrent: index === 0,
+    })))
+  },
+})
+```
+
+`isCurrent`는 이력 패널의 선택 기준과 중복 렌더 제외 대상을 알리는 값입니다.
+현재 편집 상태 자체는 `initialCanvasData` 또는 `loadPdfUrl`/`loadPdfBase64`의
+`canvasData` 인자로 함께 복원해야 합니다. `isCurrent`를 넣지 않은 목록은 기존
+검토본 레이어 모드로 유지되어 여러 항목을 동시에 켤 수 있습니다.
+
 ## 배포 보안
 
 - 운영 환경은 HTTPS를 사용합니다.

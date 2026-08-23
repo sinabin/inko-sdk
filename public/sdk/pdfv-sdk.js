@@ -26,7 +26,7 @@
  *
  *   viewer.save();                 // 캔버스 저장 요청 → onSave 콜백
  *   viewer.loadPdfUrl(url, name);  // 다른 PDF로 교체
- *   viewer.loadUserCanvasOverlay(list); // 다른 검토 상태를 레이어로 표시
+ *   viewer.loadUserCanvasOverlay(list); // isCurrent 없으면 복수 검토 레이어, 있으면 단일 선택 버전 이력
  *   viewer.clear();
  *   viewer.applyConfig({ theme, tools, locale, messages }); // 런타임 커스터마이징 부분 갱신
  *   viewer.destroy();
@@ -259,9 +259,10 @@
       },
 
       /**
-       * 다른 사용자 작업 이력 오버레이 (협업·리뷰 용도)
-       * 자기 자신의 직전 작업 복원과는 별개 — 그건 mount 시 initialCanvasData 또는 loadPdf*로 처리.
-       * @param {Array<{canvasId, userName, canvasData, enabled, ...}>} list
+       * 이력 패널 항목을 교체한다.
+       * isCurrent가 없으면 협업·리뷰용 복수 레이어, 하나에 true면 정확히 하나를 고르는 버전 이력.
+       * 현재 편집 상태 복원은 별도로 mount의 initialCanvasData 또는 loadPdf*로 처리한다.
+       * @param {Array<{canvasId, userName, canvasData, enabled?, isCurrent?, registeredAt?, ...}>} list
        */
       loadUserCanvasOverlay: function (list) {
         send(MSG.LOAD_USER_CANVAS, Array.isArray(list) ? list : []);
@@ -312,6 +313,6 @@
     mount: mount,
     /** 디버깅·고급 사용 — 메시지 타입 상수 노출 */
     MESSAGE_TYPES: MSG,
-    version: '1.0.0',
+    version: '1.0.1',
   };
 });

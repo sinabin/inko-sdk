@@ -147,4 +147,17 @@ describe('paperCanvas — 줌 좌표계 invariant', () => {
     reborn.setZoom(1.0)
     expect(reborn.exportJSON()).toBe(saved)
   })
+
+  it('다른 PaperScope가 활성화·해제된 뒤에도 저장본을 원래 캔버스로 복원', () => {
+    addSamplePath(pc, [[80, 90], [220, 260], [410, 500]])
+    const saved = pc.exportJSON()
+
+    // 검토 레이어처럼 별도 scope가 마지막으로 활성화된 뒤 제거되는 상황을 재현한다.
+    const transient = createPaperCanvas()
+    transient.init(makeCanvas(), BASE_W, BASE_H, 1.0)
+    transient.dispose()
+
+    pc.importJSON(saved)
+    expect(pc.exportJSON()).toBe(saved)
+  })
 })

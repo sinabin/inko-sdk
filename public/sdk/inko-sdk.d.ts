@@ -6,6 +6,10 @@ export interface UserCanvasEntry {
   userName: string;
   canvasData: string;
   enabled?: boolean;
+  /** Marks the current editable version and opts this list into exactly-one version-history selection. */
+  isCurrent?: boolean;
+  /** ISO or yyyy-MM-dd HH:mm:ss timestamp shown in the history panel. */
+  registeredAt?: string;
   [key: string]: unknown;
 }
 
@@ -88,8 +92,10 @@ export interface ViewerInstance {
   /** Replace current PDF with a Base64-encoded document */
   loadPdfBase64(base64: string, fileName?: string, canvasData?: string, readOnly?: boolean): void;
   /**
-   * Overlay another user's annotation history (collaboration / review mode).
-   * For restoring your own annotations use initialCanvasData or loadPdfUrl/loadPdfBase64.
+   * Load annotation entries into the history panel.
+   * Without isCurrent, entries are independent collaboration/review overlays (multi-select).
+   * When one entry has isCurrent: true, the list becomes version history with exactly-one selection.
+   * Restore the editable current state through initialCanvasData or loadPdfUrl/loadPdfBase64.
    */
   loadUserCanvasOverlay(list: UserCanvasEntry[]): void;
   /** Request save — result delivered via onSave callback */

@@ -19,6 +19,7 @@ Inko는 [NextH](https://nexth.co.kr/)가 공개합니다. 구현과 기술적 �
 - 펜·형광펜·지우개·텍스트·도형·선택·줌·썸네일 도구
 - `canvasData`를 통한 편집 상태 반환과 복원
 - `loadUserCanvasOverlay()`를 통한 검토 상태 레이어 표시
+- 항목 하나에 `isCurrent: true`를 지정하는 단일 선택 버전 이력
 - `Inko.mount()` 기반 브라우저·iframe SDK
 - 테마·도구·한국어/영어 UI 설정
 
@@ -117,7 +118,7 @@ npm audit signatures
 GitHub build attestation은 다음과 같이 검증할 수 있습니다.
 
 ```bash
-gh attestation verify inko-pdf-sdk-1.0.0.tgz --repo sinabin/inko-sdk
+gh attestation verify inko-pdf-sdk-1.0.1.tgz --repo sinabin/inko-sdk
 ```
 
 ## 문서

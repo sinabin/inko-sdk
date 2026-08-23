@@ -139,7 +139,10 @@ export function createPaperCanvas(options: PaperCanvasOptions = {}) {
 
   /** JSON 데이터를 캔버스에 가져오기 (1.0x project 좌표계 가정) */
   function importJSON(json: string) {
-    if (!project) return
+    if (!scope || !project) return
+    // Paper.js 역직렬화는 전역 활성 scope의 currentStyle을 참조한다.
+    // 검토용 임시 scope가 먼저 해제됐더라도 반드시 이 편집 캔버스로 복원한다.
+    scope.activate()
     project.activeLayer.removeChildren()
     project.activeLayer.importJSON(json)
   }

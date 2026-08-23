@@ -8,9 +8,9 @@
     userCanvasData: UserCanvasInfo[]
     isVisible: boolean
     isReadOnly?: boolean
-    /** 편집 캔버스에 로드된 현재 버전의 canvasId — 이 항목은 '편집 중'으로 표시, 토글 불가 */
+    /** 편집 캔버스에 로드된 현재 버전의 canvasId */
     currentEditCanvasId?: string
-    /** 버전 이력 모드일 때만 '편집 중' 배지/미리보기 동작 적용. 기본 다중 사용자 레이어 모드는 false */
+    /** 버전 이력 모드에서는 라디오처럼 정확히 한 항목만 선택. 기본 다중 사용자 레이어 모드는 false */
     isVersionHistoryMode?: boolean
     onToggleVisibility?: (canvasId: string, visible: boolean) => void
     onLoadHistory?: (canvasId: string) => void
@@ -27,12 +27,6 @@
     onLoadHistory,
     onClose
   }: Props = $props()
-
-  // 과거 버전을 미리보기 중인가 — 현재 편집(currentEditCanvasId) 외 항목이 켜져 있으면 true.
-  // 이때 현재 편집본은 화면에서 숨겨지므로, 그 항목에 '편집 중' 배지를 띄우지 않는다.
-  let isPreviewing = $derived(
-    userCanvasData.some(d => d.enabled && d.canvasId !== currentEditCanvasId)
-  )
 
   /** Safari/WebView 호환 날짜 파싱 (yyyy-MM-dd HH:mm:ss → ISO 형식 변환) */
   function formatDate(dateStr: string | undefined): string {
@@ -95,41 +89,38 @@
         <p>{t('history.empty')}</p>
       </div>
     {:else}
-      <ul class="list-content">
+      <ul class="list-content" role={isVersionHistoryMode ? 'radiogroup' : undefined}>
         {#each userCanvasData as data (data.canvasId)}
           {@const visible = data.enabled ?? false}
           {@const isCurrent = !!currentEditCanvasId && data.canvasId === currentEditCanvasId}
-          {@const showAsEditing = isVersionHistoryMode && isCurrent && !isPreviewing}
+          {@const showAsCurrent = isVersionHistoryMode && isCurrent && visible}
 
           <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
           <li
             class="list-item"
-            class:enabled={visible && !showAsEditing}
-            class:current={showAsEditing}
-            role={showAsEditing ? undefined : 'button'}
-            tabindex={showAsEditing ? undefined : 0}
-            aria-pressed={showAsEditing ? undefined : visible}
-            aria-label={showAsEditing ? t('history.editingCurrent', { name: data.userName }) : (visible ? t('history.hideUser', { name: data.userName }) : t('history.showUser', { name: data.userName }))}
-            onclick={showAsEditing ? undefined : () => handleCardToggle(data.canvasId, visible)}
-            onkeydown={showAsEditing ? undefined : (e) => handleCardKeydown(e, data.canvasId, visible)}
+            class:enabled={visible && !showAsCurrent}
+            class:current={showAsCurrent}
+            role={isVersionHistoryMode ? 'radio' : 'button'}
+            tabindex="0"
+            aria-checked={isVersionHistoryMode ? visible : undefined}
+            aria-pressed={isVersionHistoryMode ? undefined : visible}
+            aria-label={isVersionHistoryMode ? data.userName : (visible ? t('history.hideUser', { name: data.userName }) : t('history.showUser', { name: data.userName }))}
+            onclick={() => handleCardToggle(data.canvasId, visible)}
+            onkeydown={(e) => handleCardKeydown(e, data.canvasId, visible)}
           >
             <div class="item-header">
-              {#if showAsEditing}
-                <span class="editing-badge">{t('history.editing')}</span>
-              {:else}
-                <span class="visibility-indicator" class:visible aria-hidden="true">
-                  {#if visible}
-                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="8" cy="8" r="6.5" fill="currentColor" stroke="none"/>
-                      <polyline points="5 8.4 7.2 10.6 11 6.2" stroke="#fff"/>
-                    </svg>
-                  {:else}
-                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
-                      <circle cx="8" cy="8" r="6.5"/>
-                    </svg>
-                  {/if}
-                </span>
-              {/if}
+              <span class="visibility-indicator" class:visible aria-hidden="true">
+                {#if visible}
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8" cy="8" r="6.5" fill="currentColor" stroke="none"/>
+                    <polyline points="5 8.4 7.2 10.6 11 6.2" stroke="#fff"/>
+                  </svg>
+                {:else}
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <circle cx="8" cy="8" r="6.5"/>
+                  </svg>
+                {/if}
+              </span>
               <strong class="user-name">
                 {data.userName || t('history.unknownUser')}
               </strong>
@@ -275,7 +266,7 @@
     background-color: var(--blue-100);
   }
 
-  /* 현재 편집 중인 버전 — 편집 캔버스에 떠 있어 항상 표시. 토글 불가, '편집 중' 배지로 구분 */
+  /* 현재 편집 중인 버전 — 선택 체크와 강조면으로 표시 */
   .list-item.current {
     background-color: var(--blue-100);
     border-left: 3px solid var(--color-primary-strong);
@@ -284,20 +275,6 @@
 
   .list-item.current:hover {
     background-color: var(--blue-100);
-  }
-
-  .editing-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px var(--space-2);
-    background: var(--color-primary-strong);
-    color: var(--color-text-inverse);
-    font-size: 11px;
-    font-weight: var(--font-weight-semibold);
-    border-radius: var(--radius-sm);
-    line-height: 1.4;
-    flex-shrink: 0;
-    white-space: nowrap;
   }
 
   .item-header {

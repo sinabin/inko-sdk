@@ -117,8 +117,8 @@
   let hasUserCanvasData = $derived(userCanvasData.length > 0)
   // 현재 편집 캔버스에 로드된 작업이력 항목의 canvasId — userOverlay 중복 렌더 방지용
   let currentEditCanvasId = $state<string>('')
-  // 버전 이력 모드 — standalone 개발용 localStorage 이력에서만 사용한다.
-  // 공개 SDK의 다중 검토 레이어는 편집 베이스라인과 독립적이므로 항상 false다.
+  // 버전 이력 모드 — standalone localStorage 이력 또는 공개 SDK 목록의 isCurrent 신호로 활성화.
+  // isCurrent가 없는 공개 목록은 기존 다중 검토 레이어로 유지한다.
   let isVersionHistoryMode = $state(false)
 
   // 호스트 커스터마이징 (SDK applyConfig) — 미지정 시 기본값 유지
@@ -736,14 +736,19 @@
 
   // 버전 이력은 한 시점만 미리보기, 협업 레이어는 각 검토자를 독립 토글.
   function handleHistoryToggleVisibility(canvasId: string, visible: boolean) {
+    if (isVersionHistoryMode) {
+      // 라디오 선택처럼 항상 정확히 한 시점만 유지한다. 선택된 항목의 재클릭은 해제하지 않는다.
+      if (!visible) return
+      userCanvasData = userCanvasData.map(data => ({
+        ...data,
+        enabled: data.canvasId === canvasId
+      }))
+      return
+    }
+
     userCanvasData = userCanvasData.map(data => {
-      const isTarget = data.canvasId === canvasId
-      if (isTarget) {
+      if (data.canvasId === canvasId) {
         return { ...data, enabled: visible }
-      }
-      // 과거 버전 미리보기만 단일 선택 — 일반 검토자 레이어는 기존 표시 조합 유지.
-      if (isVersionHistoryMode && visible) {
-        return { ...data, enabled: false }
       }
       return data
     })
@@ -897,7 +902,8 @@
         canvasData: candidate.canvasData,
         enabled: candidate.enabled === true,
         color: typeof candidate.color === 'string' ? candidate.color : '',
-        registeredAt: typeof candidate.registeredAt === 'string' ? candidate.registeredAt : undefined
+        registeredAt: typeof candidate.registeredAt === 'string' ? candidate.registeredAt : undefined,
+        isCurrent: candidate.isCurrent === true
       })
     })
 
@@ -921,10 +927,24 @@
 
       onLoadUserCanvasData: (data) => {
         console.log('[PdfViewer] Loaded user canvas data via postMessage:', data.length, 'items')
-        userCanvasData = normalizeUserCanvasData(data)
-        // 공개 overlay 목록은 현재 편집본과 독립된 검토 레이어만 표현
-        currentEditCanvasId = ''
-        isVersionHistoryMode = false
+        const normalized = normalizeUserCanvasData(data)
+        const current = normalized.find(item => item.isCurrent)
+
+        if (current) {
+          // isCurrent는 공개 버전 이력 모드의 명시적 옵트인이다.
+          // 호스트가 보낸 enabled 값과 무관하게 현재 항목 하나만 선택한다.
+          currentEditCanvasId = current.canvasId
+          isVersionHistoryMode = true
+          userCanvasData = normalized.map(item => ({
+            ...item,
+            enabled: item.canvasId === current.canvasId
+          }))
+        } else {
+          // isCurrent가 없으면 기존 협업/검토 레이어의 독립 다중 선택 계약을 유지한다.
+          userCanvasData = normalized
+          currentEditCanvasId = ''
+          isVersionHistoryMode = false
+        }
       },
 
       onSaveCanvas: () => {
@@ -969,9 +989,7 @@
     if (!useLocalStorageHistory) return
     const entries = loadHistory(pdfLoader.fileName)
     userCanvasData = toUserCanvasInfoList(entries)
-    // localStorage 이력은 단일 사용자 append-only 버전 이력 — 버전 이력 모드로 표시
-    // ('편집 중' 배지 + 과거 버전 미리보기). 협업(다중 사용자 레이어) 모드가 아니므로
-    // 배지 없이는 자동 로드된 편집본이 "체크 없이 렌더링되는" 것처럼 보이는 문제 발생
+    // localStorage 이력은 단일 사용자 append-only 버전 이력 — 정확히 한 시점만 선택한다.
     isVersionHistoryMode = userCanvasData.length > 0
   }
 
@@ -1032,8 +1050,8 @@
       })
       return
     }
-    // 공개 SDK overlay는 복수 검토본을 그대로 겹쳐 보는 데이터다. 최신 항목을 편집
-    // 캔버스로 자동 승격하는 동작은 standalone localStorage 버전 이력에만 적용한다.
+    // 공개 SDK의 편집 상태 복원은 호스트가 initialCanvasData/loadPdf*로 통제한다.
+    // 목록 첫 항목을 자동으로 편집 캔버스에 올리는 동작은 standalone localStorage에만 적용한다.
     if (!useLocalStorageHistory || !isVersionHistoryMode) return
     if (isReadOnly || data.length === 0) return
     if (autoLoadedDoc === doc) return

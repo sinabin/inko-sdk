@@ -91,6 +91,8 @@ export interface UserCanvasInfo {
   enabled: boolean
   color: string
   registeredAt?: string
+  /** 이 항목을 현재 편집 기준점으로 표시하면 버전 이력(단일 선택) 모드로 전환 */
+  isCurrent?: boolean
 }
 
 // ===== Scroll Mode Types =====

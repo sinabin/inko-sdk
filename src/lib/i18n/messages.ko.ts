@@ -30,10 +30,8 @@ export const ko: Record<string, string> = {
   // 작업 이력 패널
   'history.title': '작업 이력',
   'history.empty': '작업 이력이 없습니다.',
-  'history.editing': '편집 중',
   'history.continueEdit': '이어서 편집',
   'history.unknownUser': '알 수 없음',
-  'history.editingCurrent': '{name} — 현재 편집 중',
   'history.hideUser': '{name} 숨기기',
   'history.showUser': '{name} 보이기',
 
