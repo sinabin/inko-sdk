@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, tick, untrack } from 'svelte'
-  import type { ToolMode, OrientationMode, UserCanvasInfo, PdfOutlineNode } from '../types'
+  import type { ToolMode, OrientationMode, UserCanvasInfo } from '../types'
   import { createPdfLoader } from '../lib/pdf/pdfLoader.svelte'
   import { createPageNavigation } from '../lib/pdf/pageNavigation.svelte'
-  import { extractOutline } from '../lib/pdf/pdfOutline'
   import { createZoomControl, ZOOM_MIN_SCALE, ZOOM_MAX_SCALE } from '../lib/interaction/zoomControl.svelte'
   import { captureZoomAnchor, applyZoomAnchor } from '../lib/interaction/zoomAnchor'
   import { createBrushSettings } from '../lib/tools/brushSettings.svelte'
@@ -31,7 +30,6 @@
   import PdfThumbnailList from './PdfThumbnailList.svelte'
   import TextInputOverlay from './TextInputOverlay.svelte'
   import UserCanvasDataList from './UserCanvasDataList.svelte'
-  import PdfOutlinePanel from './PdfOutlinePanel.svelte'
   import ToolHint from './ToolHint.svelte'
   import ToolOptionsSheet from './ToolOptionsSheet.svelte'
   import type { ToolSheetKind } from './ToolOptionsSheet.svelte'
@@ -114,12 +112,6 @@
   let textInputInitialText = $state('')
   let isHistoryPanelVisible = $state(false)
 
-  // 책갈피(PDF 내장 목차) — 문서에서 파생되는 읽기 전용 정보이므로 저장·왕복 대상이 아님
-  let outline = $state<PdfOutlineNode[]>([])
-  let isOutlineLoading = $state(false)
-  let isOutlinePanelVisible = $state(false)
-  let hasOutline = $derived(outline.length > 0)
-
   // User canvas data
   let userCanvasData = $state<UserCanvasInfo[]>([])
   let hasUserCanvasData = $derived(userCanvasData.length > 0)
@@ -170,7 +162,6 @@
       if (tcfg.features && typeof tcfg.features === 'object') {
         toolFeatures = tcfg.features as Record<string, boolean>
         if (tcfg.features.thumbnails === false) showThumbnails = false
-        if (tcfg.features.bookmarks === false) isOutlinePanelVisible = false
       }
       const requestedDefault = typeof tcfg.defaultTool === 'string' && TOOL_MODES.includes(tcfg.defaultTool as ToolMode)
         ? tcfg.defaultTool as ToolMode
@@ -718,64 +709,6 @@
     }
   }
 
-  // 목차 추출 세대 토큰 — 연속 로드 시 이전 문서의 추출 결과가 뒤늦게 덮어쓰는 것을 차단
-  let outlineToken = 0
-
-  /**
-   * 브라우저가 한가해질 때까지 양보 — 목차 추출은 부가 기능이므로
-   * 첫 페이지 렌더(호스트가 pdfLoaded를 기다리는 임계 경로)보다 뒤로 물러난다.
-   */
-  function whenIdle(timeoutMs = 2000): Promise<void> {
-    return new Promise((resolve) => {
-      const ric = (window as any).requestIdleCallback
-      if (typeof ric === 'function') ric(() => resolve(), { timeout: timeoutMs })
-      else setTimeout(resolve, 0)
-    })
-  }
-
-  /** PDF 로드 후 내장 목차 추출 — 실패·부재는 빈 목록으로 수렴(로드 자체를 실패시키지 않음) */
-  async function refreshOutline(): Promise<void> {
-    const token = ++outlineToken
-    outline = []
-    isOutlinePanelVisible = false
-
-    const doc = pdfLoader.document
-    if (!doc) {
-      isOutlineLoading = false
-      return
-    }
-
-    isOutlineLoading = true
-    try {
-      // 첫 페이지 렌더가 pdf.js 워커를 먼저 쓰도록 양보한 뒤 추출한다
-      await whenIdle()
-      if (token !== outlineToken) return
-      const extracted = await extractOutline(doc)
-      if (token !== outlineToken) return
-      outline = extracted
-    } catch (e) {
-      if (token !== outlineToken) return
-      // 목차는 부가 기능 — 실패해도 뷰어 사용을 막지 않는다
-      console.warn('[PdfViewer] Failed to extract PDF outline:', e)
-      outline = []
-    } finally {
-      if (token === outlineToken) isOutlineLoading = false
-    }
-  }
-
-  /** 책갈피 패널 토글 — 이력 패널과 같은 우측 자리를 쓰므로 상호 배타 */
-  function handleToggleOutline() {
-    if (toolFeatures.bookmarks === false) return
-    isOutlinePanelVisible = !isOutlinePanelVisible
-    if (isOutlinePanelVisible) isHistoryPanelVisible = false
-  }
-
-  /** 목차 항목 클릭 — 해당 페이지로 이동. 패널은 연속 탐색을 위해 열어 둠 */
-  function handleOutlineNavigate(page: number) {
-    pageNav.goToPage(page)
-    scrollViewerComponent?.scrollToPage(page)
-  }
-
   // Handle thumbnail sidebar toggle
   function handleToggleThumbnails() {
     if (toolFeatures.thumbnails === false) return
@@ -799,8 +732,6 @@
   // Handle history panel toggle
   function handleToggleHistory() {
     isHistoryPanelVisible = !isHistoryPanelVisible
-    // 두 패널은 우측 같은 자리를 공유 — 겹쳐 뜨지 않도록 상호 배타
-    if (isHistoryPanelVisible) isOutlinePanelVisible = false
   }
 
   // 버전 이력은 한 시점만 미리보기, 협업 레이어는 각 검토자를 독립 토글.
@@ -880,8 +811,6 @@
       pageNav.setTotalPages(pdfLoader.totalPages)
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
-      // 내장 목차 추출 — 렌더를 막지 않도록 await 하지 않음
-      void refreshOutline()
       // standalone 모드: localStorage 저장이력을 작업이력 패널에 반영
       refreshLocalCanvasHistory()
     }
@@ -898,8 +827,6 @@
       pageNav.setTotalPages(pdfLoader.totalPages)
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
-      // 내장 목차 추출 — 렌더를 막지 않도록 await 하지 않음
-      void refreshOutline()
       // standalone 모드: localStorage 저장이력을 작업이력 패널에 반영
       refreshLocalCanvasHistory()
     }
@@ -1189,8 +1116,6 @@
     logoUrl={brandLogoUrl}
     hasUserCanvasData={hasUserCanvasData}
     isHistoryPanelVisible={isHistoryPanelVisible}
-    isOutlinePanelVisible={isOutlinePanelVisible}
-    hasOutline={hasOutline}
     showThumbnails={showThumbnails}
     canUndo={canUndo}
     canRedo={canRedo}
@@ -1199,7 +1124,6 @@
     onOpenToolOptions={handleToggleToolOptions}
     orientation={currentOrientation}
     onToggleThumbnails={handleToggleThumbnails}
-    onToggleOutline={handleToggleOutline}
     onOrientationToggle={handleOrientationToggle}
     onToolChange={handleToolChange}
     onPageChange={(page) => {
@@ -1297,18 +1221,6 @@
       onWidthChange={handleSheetWidthChange}
       onPressureSensitivityChange={handlePressureSensitivityChange}
       onClose={handleSheetClose}
-    />
-  {/if}
-
-  <!-- 책갈피 패널 (PDF 내장 목차) -->
-  {#if toolFeatures.bookmarks !== false}
-    <PdfOutlinePanel
-      outline={outline}
-      isVisible={isOutlinePanelVisible}
-      isLoading={isOutlineLoading}
-      currentPage={pageNav.currentPage}
-      onNavigate={handleOutlineNavigate}
-      onClose={() => { isOutlinePanelVisible = false }}
     />
   {/if}
 

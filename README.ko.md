@@ -17,7 +17,6 @@ Inko는 [NextH](https://nexth.co.kr/)가 공개합니다. 구현과 기술적 �
 
 - PDF.js 기반 PDF 렌더링
 - 펜·형광펜·지우개·텍스트·도형·선택·줌·썸네일 도구
-- PDF에 내장된 목차를 읽어 보여주는 책갈피 패널 (목차가 있는 문서에서만 노출)
 - `canvasData`를 통한 편집 상태 반환과 복원
 - `loadUserCanvasOverlay()`를 통한 검토 상태 레이어 표시
 - 항목 하나에 `isCurrent: true`를 지정하는 단일 선택 버전 이력

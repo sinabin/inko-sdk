@@ -51,7 +51,7 @@ PDF 로드가 차단될 수 있습니다.
 | `width`, `height` | `string` | 생성되는 iframe 크기 |
 | `iframeAttributes` | `object` | iframe에 추가할 속성 |
 | `theme` | `object` | 색상·로고·CSS 변수 설정 |
-| `tools` | `object` | 도구와 툴바 기능 설정 (`features.bookmarks`로 책갈피 패널 노출 제어) |
+| `tools` | `object` | 도구와 툴바 기능 설정 |
 | `locale` | `string` | `ko` 또는 `en` |
 | `messages` | `object` | UI 문구의 키별 재정의 |
 | `onReady` | `function` | SDK와 뷰어 연결 완료 |
@@ -105,30 +105,6 @@ const viewer = Inko.mount('#inko', {
 
 Inko는 상태를 반환하고 복원하지만 저장 요청의 인증·권한 확인, 동시 수정 정책,
 버전 번호, 보존 기간과 장애 복구는 호스트 앱의 책임입니다.
-
-## 책갈피 (PDF 내장 목차)
-
-PDF 파일에 목차(outline) 정보가 들어 있으면 뷰어가 이를 읽어 책갈피 패널로
-보여줍니다. 툴바의 책갈피 버튼은 **목차가 실제로 있는 문서에서만** 나타나므로,
-목차가 없는 PDF에서 빈 패널이 열리는 일은 없습니다.
-
-- 목차 항목을 누르면 해당 페이지로 이동합니다.
-- 하위 항목이 있는 항목은 접고 펼칠 수 있습니다.
-- 현재 보고 있는 페이지에 해당하는 항목이 강조됩니다.
-- 대상을 해석할 수 없는 손상된 항목은 목록에 남되 이동이 비활성화됩니다.
-
-목차는 PDF 파일에서 파생되는 읽기 전용 정보입니다. 호스트가 따로 전달하거나
-저장할 값이 없고, `canvasData`에도 포함되지 않습니다.
-
-필요하면 툴바에서 숨길 수 있습니다.
-
-```javascript
-Inko.mount('#viewer', {
-  src: '/inko/viewer/index.html',
-  pdfUrl: '/files/manual.pdf',
-  tools: { features: { bookmarks: false } },
-});
-```
 
 ## 검토본 레이어
 

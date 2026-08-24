@@ -55,7 +55,7 @@ assert.ok(
 )
 assert.equal(
   sha256(resolve(root, 'public/samples/inko-demo.pdf')),
-  '48A506F0EDFC6BDA6B72A8B70052B17B02A97AEA4ECAD1C94A08A2A569324326',
+  '2C30C70BF5F8A4DDE4706E9BC877A5F781DEBF899C4DB24446007216D15953AC',
   'synthetic PDF fixture changed without provenance review'
 )
 
