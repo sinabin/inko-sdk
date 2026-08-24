@@ -2,6 +2,7 @@
   "rootFiles": [
     ".gitattributes",
     ".gitignore",
+    ".gitleaks.toml",
     "CONTRIBUTING.md",
     "LICENSE",
     "NOTICE",

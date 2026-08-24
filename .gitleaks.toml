@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deterministic SHA-256 for the bundled pdf.js annotation-key icon"
+condition = "AND"
+paths = ['''^public/pdfjs-images/manifest\.json$''']
+regexTarget = "line"
+regexes = ['''"annotation-key\.svg"\s*:\s*"[0-9a-f]{64}"''']

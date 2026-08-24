@@ -77,6 +77,7 @@ if (existsSync(resolve(root, '.git'))) {
 for (const required of [
   '.github/workflows/ci.yml',
   '.github/workflows/release.yml',
+  '.gitleaks.toml',
   'LICENSE',
   'NOTICE',
   'README.md',
