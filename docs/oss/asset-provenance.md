@@ -7,9 +7,12 @@ project license and is not a public-release approval.
 
 - File: `public/samples/inko-demo.pdf`
 - Generator: `scripts/generate-oss-sample-pdf.py`
-- SHA-256: `2C30C70BF5F8A4DDE4706E9BC877A5F781DEBF899C4DB24446007216D15953AC`
-- Properties checked: 12 A4 pages, NextH author metadata, 8,076 extracted text
-  characters, Helvetica/Helvetica-Bold Base14 references only, no embedded images
+- SHA-256: `586ECCCEA5D466F910298B76BFF20B17325F477D5D4CDA06F5AF613FF2387B0D`
+- Properties checked: 12 A4 pages, NextH author metadata, Helvetica/Helvetica-Bold
+  Base14 references only, no embedded images, and an embedded document outline of
+  13 entries across two levels (5 top-level sections, 8 nested annotation samples)
+- Outline rationale: the viewer reads embedded outlines through pdf.js
+  `getOutline()`, so the fixture carries a nested outline to exercise that path
 - Content boundary: synthetic NextH copy only; no customer, government, partner,
   personal, or third-party document content
 

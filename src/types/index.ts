@@ -95,6 +95,24 @@ export interface UserCanvasInfo {
   isCurrent?: boolean
 }
 
+// ===== Outline (Bookmark) Types =====
+/**
+ * PDF 파일에 내장된 목차 항목.
+ * 파일에서 파생되는 읽기 전용 정보이므로 편집·저장·호스트 왕복 대상이 아니다.
+ */
+export interface PdfOutlineNode {
+  /** 트리 내 안정 식별자 — 경로 기반(예: "0.2.1") */
+  id: string
+  title: string
+  /** 해석에 실패한 대상은 null — UI에서 이동 불가 항목으로 표기 */
+  page: number | null
+  /** 외부 URL 대상 — 보안상 뷰어가 열지 않고 구조만 표시 */
+  external?: boolean
+  /** 트리 들여쓰기 깊이 (0 = 최상위) */
+  depth: number
+  children: PdfOutlineNode[]
+}
+
 // ===== Scroll Mode Types =====
 export interface PageRenderState {
   pageNum: number

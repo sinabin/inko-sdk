@@ -165,7 +165,11 @@ async function drawStroke(frame) {
   await pen.waitFor({ state: 'visible', timeout: 15_000 })
   await pen.click()
 
-  const canvas = frame.locator('.scroll-page-container canvas.scroll-page-canvas-paper').first()
+  const currentPage = Number(await frame.locator('.page-input').inputValue())
+  assert(Number.isInteger(currentPage) && currentPage > 0, 'viewer reported an invalid current page')
+  const canvas = frame.locator(
+    `.scroll-page-container[data-page="${currentPage}"] canvas.scroll-page-canvas-paper`,
+  )
   await canvas.waitFor({ state: 'visible', timeout: 30_000 })
   await canvas.evaluate((element) => {
     const rect = element.getBoundingClientRect()
@@ -210,7 +214,7 @@ async function verifyBrowserRoundTrip(installedRoot) {
     const errorText = request.failure()?.errorText
     // pdf.js cancels an in-flight full-file request when clear/reload replaces the loading task.
     // Both required loads still have their own observed HTTP 200 response gates below.
-    if (request.url() === pdfUrl && errorText === 'net::ERR_ABORTED') {
+    if (new URL(request.url()).pathname === new URL(pdfUrl).pathname && errorText === 'net::ERR_ABORTED') {
       expectedAbortedPdfRequests += 1
       return
     }
@@ -229,11 +233,64 @@ async function verifyBrowserRoundTrip(installedRoot) {
   await page.waitForFunction(() => window.__releaseProbe?.ready === true, null, { timeout: 15_000 })
   await pdfResponse
   await page.waitForFunction(() => window.__releaseProbe?.pdfLoaded > 0, null, { timeout: 30_000 })
+  await page.waitForTimeout(1_000)
+  const initialPdfLoadedCount = await page.evaluate(() => window.__releaseProbe.pdfLoaded)
+  assert.equal(initialPdfLoadedCount, 1, 'initial SDK PDF load must emit pdfLoaded exactly once')
 
   const iframe = page.locator('#viewer iframe')
   await iframe.waitFor({ state: 'visible', timeout: 15_000 })
   const frame = page.frameLocator('#viewer iframe')
   await frame.locator('.scroll-page-container canvas.scroll-page-canvas-pdf').first().waitFor({ state: 'visible', timeout: 30_000 })
+
+  // npm tarball에 설치된 synthetic sample의 내장 outline을 공개 viewer가 그대로 제공해야 한다.
+  const bookmarkToggle = frame.locator('.outline-toggle-btn')
+  await bookmarkToggle.waitFor({ state: 'visible', timeout: 15_000 })
+  assert.equal(await bookmarkToggle.getAttribute('aria-pressed'), 'false', 'bookmark panel must start closed')
+  await bookmarkToggle.click()
+  await frame.locator('.outline-panel').waitFor({ state: 'visible', timeout: 10_000 })
+
+  const bookmarkRows = frame.locator('.outline-panel .outline-row')
+  await bookmarkRows.nth(12).waitFor({ state: 'visible', timeout: 10_000 })
+  const bookmarkRowCount = await bookmarkRows.count()
+  assert.equal(bookmarkRowCount, 13, 'installed synthetic sample must expose all 13 bookmark rows')
+  assert.equal(
+    (await frame.locator('.outline-panel .entry-title').first().textContent())?.trim(),
+    'Cover',
+    'installed synthetic sample bookmark root changed unexpectedly',
+  )
+  const parentPadding = await bookmarkRows.nth(3).evaluate(
+    (element) => Number.parseFloat(getComputedStyle(element).paddingLeft),
+  )
+  const childPadding = await bookmarkRows.nth(4).evaluate(
+    (element) => Number.parseFloat(getComputedStyle(element).paddingLeft),
+  )
+  assert(childPadding > parentPadding, 'nested bookmark row lost its hierarchy indentation')
+
+  await frame.getByRole('button', { name: /Integration checklist/ }).click()
+  await page.waitForFunction(() => {
+    const viewerFrame = document.querySelector('#viewer iframe')
+    const viewer = viewerFrame?.contentDocument?.querySelector('.scroll-viewer')
+    const target = viewerFrame?.contentDocument?.querySelector('.scroll-page-container[data-page="12"]')
+    if (!viewer || !target) return false
+    const viewport = viewer.getBoundingClientRect()
+    const rect = target.getBoundingClientRect()
+    const overlap = Math.max(0, Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top))
+    return overlap >= Math.min(rect.height, viewport.height) * 0.5
+  }, null, { timeout: 15_000 })
+  await page.waitForFunction(() => {
+    const viewerFrame = document.querySelector('#viewer iframe')
+    return viewerFrame?.contentDocument?.querySelector('.page-input')?.value === '12'
+  }, null, { timeout: 15_000 })
+  assert.equal(await frame.locator('.page-input').inputValue(), '12', 'bookmark did not navigate to page 12')
+
+  const bookmarkVerification = {
+    buttonVisible: true,
+    rowCount: bookmarkRowCount,
+    nestedIndentation: { parent: parentPadding, child: childPadding },
+    target: 'Integration checklist',
+    targetPage: 12,
+    targetPageVisible: true,
+  }
 
   const productionState = await iframe.evaluate((element) => {
     const child = element.contentWindow
@@ -288,10 +345,45 @@ async function verifyBrowserRoundTrip(installedRoot) {
   await reloadResponse
   await page.waitForFunction((count) => window.__releaseProbe.pdfLoaded > count, loadedCount, { timeout: 30_000 })
   await page.waitForTimeout(1_500)
+  const reloadLoadedCount = await page.evaluate(() => window.__releaseProbe.pdfLoaded)
+  assert.equal(reloadLoadedCount, loadedCount + 1, 'single reload must emit pdfLoaded exactly once')
 
   const restored = await saveCanvas(page)
   assert.equal(restored.ok, true, `save after restore failed: ${restored.message}`)
   assert(containsPainting(restored.canvasData), 'restored canvasData did not contain the saved stroke')
+
+  // 연속 교체 시 첫 요청은 취소되고 최신 요청 하나만 완료 통지해야 한다.
+  const rapidReloadStartCount = reloadLoadedCount
+  const rapidFinalUrl = `${pdfUrl}?reload=rapid-final`
+  const rapidFinalResponse = page.waitForResponse(
+    (response) => response.url() === rapidFinalUrl && response.status() === 200,
+    { timeout: 30_000 },
+  )
+  await page.evaluate(({ pdfUrlPath, canvasData }) => {
+    window.__releaseProbe.viewer.loadPdfUrl(`${pdfUrlPath}?reload=rapid-first`, 'rapid-first.pdf', canvasData, false)
+    window.__releaseProbe.viewer.loadPdfUrl(`${pdfUrlPath}?reload=rapid-middle`, 'rapid-middle.pdf', canvasData, false)
+    window.__releaseProbe.viewer.loadPdfUrl(`${pdfUrlPath}?reload=rapid-final`, 'rapid-final.pdf', canvasData, false)
+  }, {
+    pdfUrlPath: `/node_modules/${publicPackageName}/viewer/samples/inko-demo.pdf`,
+    canvasData: saved.canvasData,
+  })
+  await rapidFinalResponse
+  await page.waitForFunction(
+    (count) => window.__releaseProbe.pdfLoaded > count,
+    rapidReloadStartCount,
+    { timeout: 30_000 },
+  )
+  await page.waitForTimeout(1_500)
+  const rapidReloadFinalCount = await page.evaluate(() => window.__releaseProbe.pdfLoaded)
+  assert.equal(
+    rapidReloadFinalCount,
+    rapidReloadStartCount + 1,
+    'rapid consecutive reloads must emit pdfLoaded exactly once for the latest document',
+  )
+
+  const rapidRestored = await saveCanvas(page)
+  assert.equal(rapidRestored.ok, true, `save after rapid reload failed: ${rapidRestored.message}`)
+  assert(containsPainting(rapidRestored.canvasData), 'rapid reload did not preserve the latest restored canvasData')
 
   const callbackErrors = await page.evaluate(() => window.__releaseProbe.errors)
   assert.deepEqual(callbackErrors, [], `SDK callbacks reported errors: ${callbackErrors.join('; ')}`)
@@ -307,6 +399,13 @@ async function verifyBrowserRoundTrip(installedRoot) {
     savedBytes: saved.canvasData.length,
     clearedBytes: cleared.canvasData.length,
     restoredBytes: restored.canvasData.length,
+    rapidRestoredBytes: rapidRestored.canvasData.length,
+    pdfLoadedCounts: {
+      initial: initialPdfLoadedCount,
+      afterSingleReload: reloadLoadedCount,
+      afterRapidReload: rapidReloadFinalCount,
+    },
+    bookmarkVerification,
     expectedAbortedPdfRequests,
     productionState,
     installedRoot,

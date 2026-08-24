@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy, tick, untrack } from 'svelte'
-  import type { ToolMode, OrientationMode, UserCanvasInfo } from '../types'
+  import type { ToolMode, OrientationMode, UserCanvasInfo, PdfOutlineNode } from '../types'
   import { createPdfLoader } from '../lib/pdf/pdfLoader.svelte'
   import { createPageNavigation } from '../lib/pdf/pageNavigation.svelte'
+  import { extractOutline } from '../lib/pdf/pdfOutline'
   import { createZoomControl, ZOOM_MIN_SCALE, ZOOM_MAX_SCALE } from '../lib/interaction/zoomControl.svelte'
   import { captureZoomAnchor, applyZoomAnchor } from '../lib/interaction/zoomAnchor'
   import { createBrushSettings } from '../lib/tools/brushSettings.svelte'
@@ -30,6 +31,7 @@
   import PdfThumbnailList from './PdfThumbnailList.svelte'
   import TextInputOverlay from './TextInputOverlay.svelte'
   import UserCanvasDataList from './UserCanvasDataList.svelte'
+  import PdfOutlinePanel from './PdfOutlinePanel.svelte'
   import ToolHint from './ToolHint.svelte'
   import ToolOptionsSheet from './ToolOptionsSheet.svelte'
   import type { ToolSheetKind } from './ToolOptionsSheet.svelte'
@@ -112,6 +114,12 @@
   let textInputInitialText = $state('')
   let isHistoryPanelVisible = $state(false)
 
+  // 책갈피(PDF 내장 목차) — 문서에서 파생되는 읽기 전용 정보이므로 저장·왕복 대상이 아님
+  let outline = $state<PdfOutlineNode[]>([])
+  let isOutlineLoading = $state(false)
+  let isOutlinePanelVisible = $state(false)
+  let hasOutline = $derived(outline.length > 0)
+
   // User canvas data
   let userCanvasData = $state<UserCanvasInfo[]>([])
   let hasUserCanvasData = $derived(userCanvasData.length > 0)
@@ -160,8 +168,14 @@
         enabledTools = nextEnabled
       }
       if (tcfg.features && typeof tcfg.features === 'object') {
+        const bookmarksWereEnabled = toolFeatures.bookmarks !== false
         toolFeatures = tcfg.features as Record<string, boolean>
         if (tcfg.features.thumbnails === false) showThumbnails = false
+        if (tcfg.features.bookmarks === false) {
+          resetOutline()
+        } else if (!bookmarksWereEnabled && pdfLoader.document) {
+          void refreshOutline()
+        }
       }
       const requestedDefault = typeof tcfg.defaultTool === 'string' && TOOL_MODES.includes(tcfg.defaultTool as ToolMode)
         ? tcfg.defaultTool as ToolMode
@@ -709,6 +723,85 @@
     }
   }
 
+  // 목차 추출 세대 토큰 — 연속 로드 시 이전 문서의 추출 결과가 뒤늦게 덮어쓰는 것을 차단
+  let outlineToken = 0
+
+  /** 진행 중 추출 무효화와 패널·결과 초기화를 한 동작으로 유지 */
+  function resetOutline(): void {
+    outlineToken++
+    outline = []
+    isOutlineLoading = false
+    isOutlinePanelVisible = false
+  }
+
+  /**
+   * 브라우저가 한가해질 때까지 양보 — 목차 추출은 부가 기능이므로
+   * 첫 페이지 렌더(호스트가 pdfLoaded를 기다리는 임계 경로)보다 뒤로 물러난다.
+   */
+  function whenIdle(timeoutMs = 2000): Promise<void> {
+    return new Promise((resolve) => {
+      const ric = (window as any).requestIdleCallback
+      if (typeof ric === 'function') ric(() => resolve(), { timeout: timeoutMs })
+      else setTimeout(resolve, 0)
+    })
+  }
+
+  /** PDF 로드 후 내장 목차 추출 — 실패·부재는 빈 목록으로 수렴(로드 자체를 실패시키지 않음) */
+  async function refreshOutline(): Promise<void> {
+    const token = ++outlineToken
+    outline = []
+    isOutlinePanelVisible = false
+
+    const doc = pdfLoader.document
+    if (!doc) {
+      isOutlineLoading = false
+      return
+    }
+
+    isOutlineLoading = true
+    try {
+      // 새 keyed PdfScrollViewer가 연결되고 첫 페이지를 실제 표시할 때까지 대기.
+      // postMessage 완료 흐름은 같은 Promise 뒤 곧바로 pdfLoaded를 보내며,
+      // 아래 idle 양보가 목차 worker RPC를 그 신호보다 확실히 뒤로 미룬다.
+      await tick()
+      const viewer = scrollViewerComponent
+      if (!viewer) return
+      await viewer.waitUntilFirstPageReady()
+      if (token !== outlineToken || pdfLoader.document !== doc) return
+      await whenIdle()
+      if (token !== outlineToken || pdfLoader.document !== doc) return
+      const extracted = await extractOutline(doc, {
+        shouldContinue: () => (
+          token === outlineToken &&
+          pdfLoader.document === doc &&
+          toolFeatures.bookmarks !== false
+        )
+      })
+      if (token !== outlineToken || pdfLoader.document !== doc) return
+      outline = extracted
+    } catch (e) {
+      if (token !== outlineToken) return
+      // 목차는 부가 기능 — 실패해도 뷰어 사용을 막지 않는다
+      console.warn('[PdfViewer] Failed to extract PDF outline:', e)
+      outline = []
+    } finally {
+      if (token === outlineToken) isOutlineLoading = false
+    }
+  }
+
+  /** 책갈피 패널 토글 — 이력 패널과 같은 우측 자리를 쓰므로 상호 배타 */
+  function handleToggleOutline() {
+    if (toolFeatures.bookmarks === false) return
+    isOutlinePanelVisible = !isOutlinePanelVisible
+    if (isOutlinePanelVisible) isHistoryPanelVisible = false
+  }
+
+  /** 목차 항목 클릭 — 해당 페이지로 이동. 패널은 연속 탐색을 위해 열어 둠 */
+  function handleOutlineNavigate(page: number) {
+    pageNav.goToPage(page)
+    scrollViewerComponent?.scrollToPage(page)
+  }
+
   // Handle thumbnail sidebar toggle
   function handleToggleThumbnails() {
     if (toolFeatures.thumbnails === false) return
@@ -732,6 +825,8 @@
   // Handle history panel toggle
   function handleToggleHistory() {
     isHistoryPanelVisible = !isHistoryPanelVisible
+    // 두 패널은 우측 같은 자리를 공유 — 겹쳐 뜨지 않도록 상호 배타
+    if (isHistoryPanelVisible) isOutlinePanelVisible = false
   }
 
   // 버전 이력은 한 시점만 미리보기, 협업 레이어는 각 검토자를 독립 토글.
@@ -805,12 +900,15 @@
   async function loadPdfFromUrl(url: string, fileName?: string): Promise<boolean> {
     // 기존 프리뷰 정리
     lowResPreview.clearPreviews()
+    resetOutline()
 
     const success = await pdfLoader.loadFromUrl(url, fileName)
     if (success && pdfLoader.document) {
       pageNav.setTotalPages(pdfLoader.totalPages)
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
+      // 내장 목차 추출 — 첫 페이지 표시·pdfLoaded 뒤에서 비동기 실행
+      if (toolFeatures.bookmarks !== false) void refreshOutline()
       // standalone 모드: localStorage 저장이력을 작업이력 패널에 반영
       refreshLocalCanvasHistory()
     }
@@ -821,12 +919,15 @@
   async function loadPdfFromBase64(base64: string, fileName?: string): Promise<boolean> {
     // 기존 프리뷰 정리
     lowResPreview.clearPreviews()
+    resetOutline()
 
     const success = await pdfLoader.loadFromBase64(base64, fileName)
     if (success && pdfLoader.document) {
       pageNav.setTotalPages(pdfLoader.totalPages)
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
+      // 내장 목차 추출 — 첫 페이지 표시·pdfLoaded 뒤에서 비동기 실행
+      if (toolFeatures.bookmarks !== false) void refreshOutline()
       // standalone 모드: localStorage 저장이력을 작업이력 패널에 반영
       refreshLocalCanvasHistory()
     }
@@ -1069,6 +1170,7 @@
   })
 
   onDestroy(() => {
+    resetOutline()
     cleanupPointerTracking?.()
     cleanupPostMessage?.()
     cleanupLandscapeListener?.()
@@ -1116,6 +1218,8 @@
     logoUrl={brandLogoUrl}
     hasUserCanvasData={hasUserCanvasData}
     isHistoryPanelVisible={isHistoryPanelVisible}
+    isOutlinePanelVisible={isOutlinePanelVisible}
+    hasOutline={hasOutline}
     showThumbnails={showThumbnails}
     canUndo={canUndo}
     canRedo={canRedo}
@@ -1124,6 +1228,7 @@
     onOpenToolOptions={handleToggleToolOptions}
     orientation={currentOrientation}
     onToggleThumbnails={handleToggleThumbnails}
+    onToggleOutline={handleToggleOutline}
     onOrientationToggle={handleOrientationToggle}
     onToolChange={handleToolChange}
     onPageChange={(page) => {
@@ -1221,6 +1326,18 @@
       onWidthChange={handleSheetWidthChange}
       onPressureSensitivityChange={handlePressureSensitivityChange}
       onClose={handleSheetClose}
+    />
+  {/if}
+
+  <!-- 책갈피 패널 (PDF 내장 목차) -->
+  {#if toolFeatures.bookmarks !== false}
+    <PdfOutlinePanel
+      outline={outline}
+      isVisible={isOutlinePanelVisible}
+      isLoading={isOutlineLoading}
+      currentPage={pageNav.currentPage}
+      onNavigate={handleOutlineNavigate}
+      onClose={() => { isOutlinePanelVisible = false }}
     />
   {/if}
 

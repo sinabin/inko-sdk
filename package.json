@@ -1,6 +1,6 @@
 {
   "name": "inko-pdf-sdk",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -23,8 +23,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:e2e": "playwright test tests/e2e/smoke.spec.ts tests/e2e/sdk-roundtrip.spec.ts tests/e2e/apply-config.spec.ts tests/e2e/version-history-mode.spec.ts",
-    "test:e2e:ui": "playwright test tests/e2e/smoke.spec.ts tests/e2e/sdk-roundtrip.spec.ts tests/e2e/apply-config.spec.ts tests/e2e/version-history-mode.spec.ts --ui",
+    "test:e2e": "playwright test tests/e2e/smoke.spec.ts tests/e2e/sdk-roundtrip.spec.ts tests/e2e/apply-config.spec.ts tests/e2e/version-history-mode.spec.ts tests/e2e/bookmarks.spec.ts",
+    "test:e2e:ui": "playwright test tests/e2e/smoke.spec.ts tests/e2e/sdk-roundtrip.spec.ts tests/e2e/apply-config.spec.ts tests/e2e/version-history-mode.spec.ts tests/e2e/bookmarks.spec.ts --ui",
     "test:release-package": "node scripts/release/verify-release-package.mjs release",
     "test:release-install": "node tests/release/verify-installed-tarball.mjs --expect-public"
   },

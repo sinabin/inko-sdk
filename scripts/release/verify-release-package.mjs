@@ -20,9 +20,12 @@ const paths = files.map((path) => relative(release, path).replaceAll('\\', '/'))
 for (const required of [
   'LICENSE',
   'NOTICE',
+  'SECURITY.md',
   'README.md',
   'README.ko.md',
   'THIRD_PARTY_NOTICES.md',
+  'docs/integration-guide.md',
+  'docs/oss/asset-provenance.md',
   'example/index.html',
   'package.json',
   'sdk/inko-sdk.d.ts',
@@ -36,9 +39,11 @@ for (const required of [
 const allowedRoots = new Set([
   'LICENSE',
   'NOTICE',
+  'SECURITY.md',
   'README.md',
   'README.ko.md',
   'THIRD_PARTY_NOTICES.md',
+  'docs',
   'example',
   'package.json',
   'sdk',
@@ -67,9 +72,11 @@ assert.deepEqual(
   new Set([
     'LICENSE',
     'NOTICE',
+    'SECURITY.md',
     'README.md',
     'README.ko.md',
     'THIRD_PARTY_NOTICES.md',
+    'docs/',
     'viewer/',
     'sdk/',
     'example/',
@@ -78,6 +85,14 @@ assert.deepEqual(
 )
 assert.ok(paths.includes(releasePackage.main), `package main missing: ${releasePackage.main}`)
 assert.ok(paths.includes(releasePackage.types), `package types missing: ${releasePackage.types}`)
+
+for (const readmeName of ['README.md', 'README.ko.md']) {
+  const readme = readFileSync(resolve(release, readmeName), 'utf8')
+  assert.doesNotMatch(readme, /\]\(public\//, `${readmeName} contains a source-only relative link`)
+  assert.match(readme, /\]\(docs\/integration-guide\.md\)/)
+  assert.match(readme, /\]\(SECURITY\.md\)/)
+  assert.match(readme, /\]\(THIRD_PARTY_NOTICES\.md\)/)
+}
 
 const sdk = readFileSync(resolve(release, 'sdk/inko-sdk.js'), 'utf8')
 assert.match(sdk, new RegExp(`version:\\s*['\"]${rootPackage.version.replaceAll('.', '\\.')}['\"]`))

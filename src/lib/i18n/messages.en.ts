@@ -24,8 +24,24 @@ export const en: Record<string, string> = {
   'toolbar.orientationLandscape': 'Landscape view',
   'toolbar.orientationPortrait': 'Portrait view',
   'toolbar.deleteSelection': 'Delete selection',
+  'toolbar.bookmarksShow': 'Show bookmarks',
+  'toolbar.bookmarksHide': 'Hide bookmarks',
+
   'toolbar.history': 'History',
   'toolbar.save': 'Save',
+
+  // Bookmark (embedded PDF outline) panel
+  'bookmark.title': 'Bookmarks',
+  'bookmark.loading': 'Loading outline...',
+  'bookmark.outlineEmpty': 'This PDF has no outline information.',
+  'bookmark.untitled': 'Untitled',
+  'bookmark.pageLabel': 'page {n}',
+  'bookmark.goToPage': '{title} — go to {page}',
+  'bookmark.unresolved': '{title} — destination unavailable',
+  'bookmark.externalUnsupported': '{title} — external links are not opened by the viewer',
+  'bookmark.expand': 'Expand {title}',
+  'bookmark.collapse': 'Collapse {title}',
+  'bookmark.close': 'Close bookmark panel',
 
   // History panel
   'history.title': 'History',

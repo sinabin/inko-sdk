@@ -12,6 +12,7 @@ permissions:
   contents: write
   id-token: write
   attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: inko-public-release
@@ -39,7 +40,7 @@ jobs:
       - name: Set up Node.js and npm registry
         uses: actions/setup-node@v7
         with:
-          node-version: '22.12'
+          node-version: '22.14'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
@@ -59,7 +60,14 @@ jobs:
         run: npm ci
 
       - name: Verify public-source boundary
-        run: node scripts/release/verify-public-tree.mjs
+        shell: bash
+        run: |
+          PUBLIC_EXPORT="$RUNNER_TEMP/inko-public-source"
+          test ! -e "$PUBLIC_EXPORT"
+          node scripts/release/export-public-source.mjs "$PUBLIC_EXPORT"
+          if [ "$GITHUB_REPOSITORY" != "sinabin/Inko" ]; then
+            node scripts/release/verify-public-tree.mjs
+          fi
 
       - name: Audit high-severity dependency findings
         run: |
@@ -113,7 +121,9 @@ jobs:
           TARBALL: ${{ steps.artifact.outputs.tarball }}
           SBOM: ${{ steps.artifact.outputs.sbom }}
         run: |
-          npm sbom --omit=dev --sbom-format=cyclonedx --sbom-type=application > "$SBOM"
+          node scripts/release/generate-artifact-sbom.mjs "$TARBALL" "$SBOM"
+          node scripts/release/generate-artifact-sbom.mjs "$TARBALL" "$RUNNER_TEMP/sbom-second.cdx.json"
+          cmp "$SBOM" "$RUNNER_TEMP/sbom-second.cdx.json"
           sha256sum "$TARBALL" "$SBOM" > SHA256SUMS
 
       - name: Attest package and SBOM
@@ -125,9 +135,16 @@ jobs:
       - name: Check whether this version is already on npm
         id: npm_state
         shell: bash
+        env:
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          if npm view "inko-pdf-sdk@$VERSION" version --json >/dev/null 2>&1; then
+          LOCAL_INTEGRITY="$(node -e "const fs=require('node:fs'); const crypto=require('node:crypto'); process.stdout.write('sha512-'+crypto.createHash('sha512').update(fs.readFileSync(process.argv[1])).digest('base64'))" "$TARBALL")"
+          if REMOTE_INTEGRITY="$(npm view "inko-pdf-sdk@$VERSION" dist.integrity 2>/dev/null)"; then
+            if [ "$REMOTE_INTEGRITY" != "$LOCAL_INTEGRITY" ]; then
+              echo "npm already contains inko-pdf-sdk@$VERSION with different bytes" >&2
+              exit 1
+            fi
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
@@ -135,8 +152,6 @@ jobs:
 
       - name: Publish package to npm with provenance
         if: steps.npm_state.outputs.published != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish "${{ steps.artifact.outputs.tarball }}" --access public --provenance
 
       - name: Create GitHub release from the same artifacts

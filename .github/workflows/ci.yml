@@ -39,7 +39,14 @@ jobs:
         run: npm ci
 
       - name: Verify public-source boundary
-        run: node scripts/release/verify-public-tree.mjs
+        shell: bash
+        run: |
+          PUBLIC_EXPORT="$RUNNER_TEMP/inko-public-source"
+          test ! -e "$PUBLIC_EXPORT"
+          node scripts/release/export-public-source.mjs "$PUBLIC_EXPORT"
+          if [ "$GITHUB_REPOSITORY" != "sinabin/Inko" ]; then
+            node scripts/release/verify-public-tree.mjs
+          fi
 
       - name: Audit high-severity dependency findings
         run: |
@@ -78,8 +85,14 @@ jobs:
           node tests/release/verify-installed-tarball.mjs "${ARCHIVES[0]}" --expect-public
           npm pack --dry-run --json ./release > npm-pack-dry-run.json
 
-      - name: Generate CycloneDX SBOM
-        run: npm sbom --omit=dev --sbom-format=cyclonedx --sbom-type=application > sbom.cdx.json
+      - name: Generate and verify artifact CycloneDX SBOM
+        shell: bash
+        run: |
+          mapfile -t ARCHIVES < <(find . -maxdepth 1 -type f -name '*.tgz' -printf '%f\n')
+          test "${#ARCHIVES[@]}" -eq 1
+          node scripts/release/generate-artifact-sbom.mjs "${ARCHIVES[0]}" sbom.cdx.json
+          node scripts/release/generate-artifact-sbom.mjs "${ARCHIVES[0]}" "$RUNNER_TEMP/sbom-second.cdx.json"
+          cmp sbom.cdx.json "$RUNNER_TEMP/sbom-second.cdx.json"
 
       - name: Upload verification evidence
         if: always()

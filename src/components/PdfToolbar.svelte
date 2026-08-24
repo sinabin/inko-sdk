@@ -12,6 +12,10 @@
     isReadOnly?: boolean
     hasUserCanvasData?: boolean
     isHistoryPanelVisible?: boolean
+    /** 책갈피(PDF 내장 목차) 패널 표시 여부 */
+    isOutlinePanelVisible?: boolean
+    /** PDF에 목차가 있을 때만 버튼 노출 — 빈 패널로 유도하지 않기 위함 */
+    hasOutline?: boolean
     showThumbnails?: boolean
     orientation?: OrientationMode
     onToolChange?: (tool: ToolMode) => void
@@ -34,6 +38,7 @@
     onSave?: () => void
     onToggleHistory?: () => void
     onToggleThumbnails?: () => void
+    onToggleOutline?: () => void
     onOrientationToggle?: () => void
     fontSize?: number
     onFontSizeChange?: (size: number) => void
@@ -57,6 +62,8 @@
     isReadOnly = false,
     hasUserCanvasData = false,
     isHistoryPanelVisible = false,
+    isOutlinePanelVisible = false,
+    hasOutline = false,
     showThumbnails = true,
     orientation = 'portrait',
     onToolChange,
@@ -74,6 +81,7 @@
     onSave,
     onToggleHistory,
     onToggleThumbnails,
+    onToggleOutline,
     onOrientationToggle,
     fontSize = 16,
     onFontSizeChange,
@@ -208,6 +216,26 @@
         {/if}
       </svg>
     </button>
+    <!-- 책갈피(PDF 내장 목차) — 목차가 있는 문서에서만 노출 -->
+    {#if hasOutline && featureOn('bookmarks')}
+      <button
+        class="btn outline-toggle-btn"
+        class:active={isOutlinePanelVisible}
+        onclick={onToggleOutline}
+        aria-pressed={isOutlinePanelVisible}
+        aria-controls="inko-outline-panel"
+        title={isOutlinePanelVisible ? t('toolbar.bookmarksHide') : t('toolbar.bookmarksShow')}
+        aria-label={isOutlinePanelVisible ? t('toolbar.bookmarksHide') : t('toolbar.bookmarksShow')}
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path
+            d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"
+            fill={isOutlinePanelVisible ? 'currentColor' : 'none'}
+            fill-opacity={isOutlinePanelVisible ? '0.18' : '0'}
+          />
+        </svg>
+      </button>
+    {/if}
     <button
       class="btn"
       onclick={handlePrevPage}
@@ -451,6 +479,15 @@
     flex-shrink: 0;
     position: relative;
     z-index: 5;
+  }
+
+  .outline-toggle-btn.active {
+    color: var(--color-primary, #1890ff);
+  }
+
+  .outline-toggle-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring, var(--color-primary));
+    outline-offset: 2px;
   }
 
   .toolbar-section {

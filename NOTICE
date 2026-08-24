@@ -4,5 +4,10 @@ Copyright 2026 Siwoo Lee (NextH / 넥스트에이치)
 Inko is developed and distributed by NextH.
 
 Third-party components and redistributed assets retain their respective
-copyrights and licenses. Their notices and license texts are provided in
-public/THIRD_PARTY_NOTICES.md and public/third_party_licenses/.
+copyrights and licenses.
+
+In a source checkout, see public/THIRD_PARTY_NOTICES.md and
+public/third_party_licenses/.
+In a built viewer, see THIRD_PARTY_NOTICES.md and third_party_licenses/.
+In the npm package, see THIRD_PARTY_NOTICES.md and
+viewer/third_party_licenses/.

@@ -55,7 +55,7 @@ assert.ok(
 )
 assert.equal(
   sha256(resolve(root, 'public/samples/inko-demo.pdf')),
-  '2C30C70BF5F8A4DDE4706E9BC877A5F781DEBF899C4DB24446007216D15953AC',
+  '586ECCCEA5D466F910298B76BFF20B17325F477D5D4CDA06F5AF613FF2387B0D',
   'synthetic PDF fixture changed without provenance review'
 )
 
@@ -160,9 +160,12 @@ if (existsSync(distDir)) {
   )
   // SVN은 세 글자라 대소문자를 무시하면 Vite 콘텐츠 해시(예: index-BY4svn44.js)에
   // 우연히 걸린다. 호스트 코드가 쓰는 형태인 대문자 단어로만 검사한다.
+  const svnWord = /\bSVN\b/u
+  assert.match('SVN', svnWord, 'SVN word-boundary scanner must remain active')
+  assert.doesNotMatch('index-BY4svn44.js', svnWord, 'lowercase asset hash must not trigger SVN scanner')
   assert.doesNotMatch(
     executableText,
-    /SVN/u,
+    svnWord,
     'host-specific compatibility code leaked into dist',
   )
   for (const { path, text } of executableFiles) {

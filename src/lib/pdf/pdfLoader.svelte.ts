@@ -1,7 +1,7 @@
 /** PDF 문서 로딩 모듈 (URL/Base64/ArrayBuffer 지원) */
 import * as pdfjsLib from 'pdfjs-dist'
 import { VerbosityLevel } from 'pdfjs-dist'
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import { reportError } from '../utils/errorReporter.svelte'
 
 // Worker 설정 - 반드시 문서 로드 전에 설정
@@ -36,6 +36,11 @@ export function createPdfLoader() {
   let error = $state<string | null>(null)
   let fileName = $state('')
 
+  // load/unload 호출마다 증가한다. 비동기 결과는 시작 당시 generation과 일치할 때만 상태에 반영한다.
+  let generation = 0
+  let activeLoadingTask: PDFDocumentLoadingTask | null = null
+  let activeDocument: PDFDocumentProxy | null = null
+
   const hasDocument = $derived(document !== null)
 
   /**
@@ -58,34 +63,86 @@ export function createPdfLoader() {
     }
   }
 
-  /** URL 또는 파일 경로로 PDF 로드 */
-  async function loadFromUrl(url: string, name?: string): Promise<boolean> {
+  /** 취소·폐기 중 오류는 상태를 다시 덮지 않도록 best-effort로 흡수한다. */
+  async function disposeResources(
+    loadingTask: PDFDocumentLoadingTask | null,
+    loadedDocument: PDFDocumentProxy | null
+  ): Promise<void> {
+    const disposals: Promise<unknown>[] = []
+    if (loadingTask) disposals.push(Promise.resolve().then(() => loadingTask.destroy()))
+    if (loadedDocument) disposals.push(Promise.resolve().then(() => loadedDocument.destroy()))
+    await Promise.allSettled(disposals)
+  }
+
+  /**
+   * 모든 입력 형식의 공통 로드 경로.
+   * - 새 요청은 직전 loadingTask/document를 즉시 소유권에서 분리한 뒤 취소·폐기
+   * - superseded 요청의 성공·실패·finally는 현재 상태를 변경하지 않음
+   * - stale 요청이 뒤늦게 문서를 반환하면 즉시 폐기
+   */
+  async function loadDocument(
+    createLoadingTask: () => PDFDocumentLoadingTask,
+    nextFileName: string
+  ): Promise<boolean> {
+    const loadGeneration = ++generation
+    const previousLoadingTask = activeLoadingTask
+    const previousDocument = activeDocument
+
+    activeLoadingTask = null
+    activeDocument = null
+    document = null
+    totalPages = 0
     isLoading = true
     error = null
-    fileName = decodeFileName(name || url.split('/').pop() || 'document.pdf')
+    fileName = decodeFileName(nextFileName)
+
+    await disposeResources(previousLoadingTask, previousDocument)
+    if (generation !== loadGeneration) return false
+
+    let loadingTask: PDFDocumentLoadingTask | null = null
 
     try {
-      const loadingTask = pdfjsLib.getDocument({ url, ...PDFJS_COMMON_OPTIONS })
-      document = await loadingTask.promise
-      totalPages = document.numPages
+      loadingTask = createLoadingTask()
+      activeLoadingTask = loadingTask
+
+      const loadedDocument = await loadingTask.promise
+      if (generation !== loadGeneration || activeLoadingTask !== loadingTask) {
+        await disposeResources(null, loadedDocument)
+        return false
+      }
+
+      activeLoadingTask = null
+      activeDocument = loadedDocument
+      document = loadedDocument
+      totalPages = loadedDocument.numPages
       return true
     } catch (e) {
+      if (generation !== loadGeneration || activeLoadingTask !== loadingTask) return false
+
+      activeLoadingTask = null
       error = e instanceof Error ? e.message : 'PDF 로드 실패'
       document = null
       totalPages = 0
       return false
     } finally {
-      isLoading = false
+      if (generation === loadGeneration) {
+        if (activeLoadingTask === loadingTask) activeLoadingTask = null
+        isLoading = false
+      }
     }
+  }
+
+  /** URL 또는 파일 경로로 PDF 로드 */
+  async function loadFromUrl(url: string, name?: string): Promise<boolean> {
+    return loadDocument(
+      () => pdfjsLib.getDocument({ url, ...PDFJS_COMMON_OPTIONS }),
+      name || url.split('/').pop() || 'document.pdf'
+    )
   }
 
   /** Base64 문자열로 PDF 로드 */
   async function loadFromBase64(base64: string, name?: string): Promise<boolean> {
-    isLoading = true
-    error = null
-    fileName = decodeFileName(name || 'document.pdf')
-
-    try {
+    return loadDocument(() => {
       // Base64 디코딩
       const binaryString = atob(base64)
       const bytes = new Uint8Array(binaryString.length)
@@ -93,18 +150,8 @@ export function createPdfLoader() {
         bytes[i] = binaryString.charCodeAt(i)
       }
 
-      const loadingTask = pdfjsLib.getDocument({ data: bytes, ...PDFJS_COMMON_OPTIONS })
-      document = await loadingTask.promise
-      totalPages = document.numPages
-      return true
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'PDF 로드 실패'
-      document = null
-      totalPages = 0
-      return false
-    } finally {
-      isLoading = false
-    }
+      return pdfjsLib.getDocument({ data: bytes, ...PDFJS_COMMON_OPTIONS })
+    }, name || 'document.pdf')
   }
 
   /** ArrayBuffer 또는 Uint8Array로 PDF 로드 */
@@ -112,28 +159,17 @@ export function createPdfLoader() {
     data: ArrayBuffer | Uint8Array,
     name?: string
   ): Promise<boolean> {
-    isLoading = true
-    error = null
-    fileName = decodeFileName(name || 'document.pdf')
-
-    try {
-      const loadingTask = pdfjsLib.getDocument({ data, ...PDFJS_COMMON_OPTIONS })
-      document = await loadingTask.promise
-      totalPages = document.numPages
-      return true
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'PDF 로드 실패'
-      document = null
-      totalPages = 0
-      return false
-    } finally {
-      isLoading = false
-    }
+    return loadDocument(
+      () => pdfjsLib.getDocument({ data, ...PDFJS_COMMON_OPTIONS }),
+      name || 'document.pdf'
+    )
   }
 
   /** 특정 페이지 반환 (1-indexed) */
   async function getPage(pageNum: number): Promise<PDFPageProxy | null> {
-    if (!document) {
+    const currentDocument = document
+    const currentGeneration = generation
+    if (!currentDocument) {
       console.warn('[PdfLoader] No document loaded')
       return null
     }
@@ -143,35 +179,50 @@ export function createPdfLoader() {
     }
 
     try {
-      return await document.getPage(pageNum)
+      const page = await currentDocument.getPage(pageNum)
+      return generation === currentGeneration && document === currentDocument ? page : null
     } catch (e) {
-      reportError('render', `페이지 ${pageNum}을 불러올 수 없습니다`, e)
+      if (generation === currentGeneration && document === currentDocument) {
+        reportError('render', `페이지 ${pageNum}을 불러올 수 없습니다`, e)
+      }
       return null
     }
   }
 
   /** PDF 원본 데이터를 ArrayBuffer로 반환 (pdf-lib 처리용) */
   async function getDataAsArrayBuffer(): Promise<ArrayBuffer | null> {
-    if (!document) return null
+    const currentDocument = document
+    const currentGeneration = generation
+    if (!currentDocument) return null
 
     try {
-      const data = await document.getData()
-      return data.buffer as ArrayBuffer
+      const data = await currentDocument.getData()
+      return generation === currentGeneration && document === currentDocument
+        ? data.buffer as ArrayBuffer
+        : null
     } catch (e) {
-      reportError('render', 'PDF 원본 데이터 추출에 실패했습니다', e)
+      if (generation === currentGeneration && document === currentDocument) {
+        reportError('render', 'PDF 원본 데이터 추출에 실패했습니다', e)
+      }
       return null
     }
   }
 
   /** 현재 문서 언로드 */
   async function unload() {
-    if (document) {
-      await document.destroy()
-    }
+    generation += 1
+    const loadingTask = activeLoadingTask
+    const loadedDocument = activeDocument
+
+    activeLoadingTask = null
+    activeDocument = null
     document = null
     totalPages = 0
+    isLoading = false
     error = null
     fileName = ''
+
+    await disposeResources(loadingTask, loadedDocument)
   }
 
   return {

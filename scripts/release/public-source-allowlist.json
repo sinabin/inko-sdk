@@ -40,6 +40,7 @@
     "scripts/check-oss-boundary.mjs",
     "scripts/generate-oss-sample-pdf.py",
     "tests/e2e/apply-config.spec.ts",
+    "tests/e2e/bookmarks.spec.ts",
     "tests/e2e/helpers.ts",
     "tests/e2e/sdk-roundtrip.spec.ts",
     "tests/e2e/smoke.spec.ts",

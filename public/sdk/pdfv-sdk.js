@@ -19,7 +19,7 @@
  *     // ── 커스터마이징 (모두 선택적, 미지정 시 기본값 유지) ──
  *     theme:    { primaryColor:'#1e6fff', saveColor:'#16a34a', historyColor:'#7c3aed', logoUrl:'/logo.svg', cssVars:{ '--radius-md':'10px' } },
  *     tools:    { enabled:['pen','highlighter','text','shape'], defaultTool:'pen', defaultColor:'#e8a045', defaultWidth:4,
- *                 features:{ save:true, history:true, thumbnails:true, zoom:true, orientation:true, undoRedo:true, pageNav:true } },
+ *                 features:{ save:true, history:true, bookmarks:true, thumbnails:true, zoom:true, orientation:true, undoRedo:true, pageNav:true } },
  *     locale:   'en',                            // 내장: 'ko'(기본) · 'en'. 그 외 언어는 messages로
  *     messages: { 'tool.pen':'Stylo' },          // 키별 UI 문구 오버라이드(커스텀 언어·문구)
  *   });
@@ -127,7 +127,6 @@
 
     // ========== iframe 생성 ==========
     var iframe = document.createElement('iframe');
-    iframe.src = options.src;
     iframe.style.border = '0';
     iframe.style.width  = options.width  || '100%';
     iframe.style.height = options.height || '100%';
@@ -138,8 +137,6 @@
         iframe.setAttribute(k, options.iframeAttributes[k]);
       });
     }
-    container.appendChild(iframe);
-
     // ========== 메시지 송신 ==========
     function send(type, data) {
       if (destroyed) return;
@@ -234,6 +231,11 @@
 
     window.addEventListener('message', handleMessage);
 
+    // listener를 navigation/DOM 연결보다 먼저 등록해야 빠른 캐시·로컬 iframe의
+    // one-shot viewerReady도 놓치지 않는다.
+    iframe.src = options.src;
+    container.appendChild(iframe);
+
     // ========== 공개 API ==========
     var instance = {
       iframe: iframe,
@@ -313,6 +315,6 @@
     mount: mount,
     /** 디버깅·고급 사용 — 메시지 타입 상수 노출 */
     MESSAGE_TYPES: MSG,
-    version: '1.0.1',
+    version: '1.1.0',
   };
 });

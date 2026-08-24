@@ -5,6 +5,7 @@ node_modules/
 dist/
 /release/
 *.tgz
+*.sbom.cdx.json
 
 # Test artifacts
 test-results/

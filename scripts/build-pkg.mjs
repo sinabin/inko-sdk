@@ -37,26 +37,46 @@ const example = readFileSync(resolve(root, 'public/sdk/example.html'), 'utf8')
   .replaceAll('/pdfv/samples/inko-demo.pdf', '../viewer/samples/inko-demo.pdf')
 writeFileSync(resolve(release, 'example/index.html'), example, 'utf8')
 
-for (const file of ['LICENSE', 'NOTICE', 'README.md', 'README.ko.md']) {
+for (const file of ['LICENSE', 'NOTICE', 'SECURITY.md']) {
   cpSync(resolve(root, file), resolve(release, file))
+}
+for (const file of ['README.md', 'README.ko.md']) {
+  const packageReadme = readFileSync(resolve(root, file), 'utf8')
+    .replaceAll('public/THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md')
+  writeFileSync(resolve(release, file), packageReadme, 'utf8')
 }
 cpSync(
   resolve(root, 'public/THIRD_PARTY_NOTICES.md'),
   resolve(release, 'THIRD_PARTY_NOTICES.md'),
 )
 
+const packageDocs = [
+  'architecture.md',
+  'data-flow.md',
+  'factory-function-pattern.md',
+  'integration-guide.md',
+  'oss/asset-provenance.md',
+]
+for (const file of packageDocs) {
+  const target = resolve(release, 'docs', file)
+  mkdirSync(dirname(target), { recursive: true })
+  cpSync(resolve(root, 'docs', file), target)
+}
+
 const releasePackage = {
   name: sourcePackage.name,
   version,
-  description: 'Self-hosted PDF editing-state SDK with review overlays and resumable editing.',
+  description: 'Self-hosted PDF editing-state SDK with outline bookmarks, review overlays, and resumable editing.',
   main: 'sdk/inko-sdk.js',
   types: 'sdk/inko-sdk.d.ts',
   files: [
     'LICENSE',
     'NOTICE',
+    'SECURITY.md',
     'README.md',
     'README.ko.md',
     'THIRD_PARTY_NOTICES.md',
+    'docs/',
     'viewer/',
     'sdk/',
     'example/',
@@ -65,6 +85,7 @@ const releasePackage = {
     'pdf',
     'sdk',
     'annotation',
+    'bookmarks',
     'review',
     'self-hosted',
     'open-source',

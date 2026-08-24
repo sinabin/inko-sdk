@@ -789,6 +789,10 @@
   })
 
   onDestroy(() => {
+    // 문서 교체·상위 뷰어 해제 중 첫 페이지가 아직 렌더되지 않았으면 대기자를 반드시 깨운다.
+    // 그렇지 않으면 이전 load 요청의 completePostMessageLoad가 영구 대기하며 수명주기를 붙잡는다.
+    markFirstPageFailed(new Error('PDF viewer was destroyed before the first page became ready'))
+
     // 모든 캔버스 데이터 저장 (1.0x baseline JSON)
     canvasManagers.forEach((manager, pageNum) => {
       const json = manager.exportJSON()

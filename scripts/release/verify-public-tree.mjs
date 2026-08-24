@@ -91,6 +91,7 @@ for (const required of [
   'public/sdk/inko-sdk.d.ts',
   'public/samples/inko-demo.pdf',
   'scripts/release/export-public-source.mjs',
+  'scripts/release/generate-artifact-sbom.mjs',
   'scripts/release/verify-public-tree.mjs',
   'scripts/release/verify-release-package.mjs',
   'tests/release/verify-installed-tarball.mjs',

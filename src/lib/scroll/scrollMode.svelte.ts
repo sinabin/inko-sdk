@@ -378,6 +378,11 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
     const total = getTotalPages()
     if (total === 0) return
 
+    // PdfScrollViewer는 document state가 먼저 보이고 page navigation state가 다음
+    // 마이크로태스크에 채워질 수 있다. 초기화 때 0을 받은 가시성 범위를 실제
+    // 페이지 수로 동기화하지 않으면 fit-width 취소 후 첫 페이지가 재요청되지 않는다.
+    visibilityManager?.updateTotalPages(total)
+
     const initialPages = Math.min(3, total)
     console.log('[ScrollMode] Triggering initial render for first', initialPages, 'pages')
 

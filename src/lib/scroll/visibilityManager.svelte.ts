@@ -51,6 +51,7 @@ export function createVisibilityManager(options: VisibilityManagerOptions): Visi
     return new IntersectionObserver(
       (entries) => {
         let changed = false
+        const previousCenterPage = centerPage
 
         entries.forEach(entry => {
           const pageNum = parseInt(entry.target.getAttribute('data-page') || '0')
@@ -72,8 +73,10 @@ export function createVisibilityManager(options: VisibilityManagerOptions): Visi
           }
         })
 
-        if (changed) {
-          updateCenterPage()
+        // threshold 교차는 가시 Set을 바꾸지 않아도 페이지 중심을 바꿀 수 있다.
+        // smooth scroll 중 같은 두 페이지가 계속 교차한 채 이동하는 경우도 재계산한다.
+        updateCenterPage()
+        if (changed || centerPage !== previousCenterPage) {
           onVisibilityChange(getVisibleRange())
         }
       },
@@ -85,7 +88,7 @@ export function createVisibilityManager(options: VisibilityManagerOptions): Visi
     )
   }
 
-  /** 중심 페이지 계산 — 가시 페이지 목록의 중앙값 반환 */
+  /** 중심 페이지 계산 — 실제 뷰포트 중심에 가장 가까운 페이지 반환 */
   function updateCenterPage(): void {
     if (visiblePages.size === 0) {
       centerPage = 1
@@ -93,8 +96,23 @@ export function createVisibilityManager(options: VisibilityManagerOptions): Visi
     }
 
     const sortedPages = [...visiblePages].sort((a, b) => a - b)
-    const midIndex = Math.floor((sortedPages.length - 1) / 2)
-    centerPage = sortedPages[midIndex]!
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const viewportCenter = containerRect.top + containerRect.height / 2
+    let closestPage = sortedPages[0]!
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    for (const pageNum of sortedPages) {
+      const element = observedElements.get(pageNum)
+      if (!element) continue
+      const rect = element.getBoundingClientRect()
+      const distance = Math.abs(rect.top + rect.height / 2 - viewportCenter)
+      if (distance < closestDistance) {
+        closestPage = pageNum
+        closestDistance = distance
+      }
+    }
+
+    centerPage = closestPage
   }
 
   /** 가시 범위 계산 — 가시 페이지만 포함 */
