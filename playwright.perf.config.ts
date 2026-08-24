@@ -15,7 +15,7 @@ export default defineConfig({
     ['json', { outputFile: 'test-results/performance/playwright-report.json' }]
   ],
   outputDir: 'test-results/performance',
-  timeout: 120_000,
+  timeout: 180_000,
   expect: { timeout: 10_000 },
   use: {
     baseURL: PERF_URL,

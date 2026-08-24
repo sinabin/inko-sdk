@@ -151,6 +151,13 @@ export function createDocumentCanvasStore(
     return readLiveSnapshot(pageNumber) ?? stored.get(pageNumber) ?? null
   }
 
+  /** 추가 export 없이 가장 최근 정규화·확정된 페이지 스냅샷 반환 */
+  function getCommittedSnapshot(pageNumber: number): string | null {
+    assertPageNumber(pageNumber)
+    if (disposed) return null
+    return stored.get(pageNumber) ?? null
+  }
+
   function getAll(): Map<number, string> {
     if (disposed) return new Map()
 
@@ -222,6 +229,7 @@ export function createDocumentCanvasStore(
 
     const attachedManagers = Array.from(liveManagers.entries())
     const nextSuppressedPages = new Set<number>()
+    const failedImportPages: number[] = []
     for (const [pageNumber, manager] of attachedManagers) {
       const pageJson = nextStored.get(pageNumber)
       if (pageJson === undefined) {
@@ -230,6 +238,7 @@ export function createDocumentCanvasStore(
       } else if (syncLivePage(pageNumber, pageJson)) {
         nextLiveSnapshotPages.add(pageNumber)
       } else {
+        failedImportPages.push(pageNumber)
         disconnectLivePage(pageNumber, manager, 'import')
       }
       if (disposed) return
@@ -242,6 +251,10 @@ export function createDocumentCanvasStore(
     nextSuppressedPages.forEach((pageNumber) => suppressedLivePages.add(pageNumber))
     liveSnapshotPages.clear()
     nextLiveSnapshotPages.forEach((pageNumber) => liveSnapshotPages.add(pageNumber))
+
+    if (failedImportPages.length > 0) {
+      throw new Error(`Failed to restore canvas data for pages: ${failedImportPages.join(', ')}`)
+    }
   }
 
   /** 한 페이지 상태 제거. manager의 빈 Paper JSON이 삭제 페이지를 되살리지 않게 차단 */
@@ -334,6 +347,7 @@ export function createDocumentCanvasStore(
   return {
     get isDisposed() { return disposed },
     get,
+    getCommittedSnapshot,
     getAll,
     serialize,
     set,

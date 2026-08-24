@@ -32,6 +32,7 @@ function createLoggingStore(log: string[]): DocumentCanvasStorePort {
   return {
     isDisposed: false,
     get: vi.fn(() => null),
+    getCommittedSnapshot: vi.fn(() => null),
     getAll: vi.fn(() => new Map()),
     serialize: vi.fn(() => '{}'),
     set: vi.fn(),

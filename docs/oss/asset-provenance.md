@@ -1,7 +1,8 @@
 # Inko OSS asset provenance register
 
-Status: internal pre-release evidence. This register does not grant an Inko
-project license and is not a public-release approval.
+Status: public provenance evidence for source-owned and redistributed assets.
+This register records origin and integrity; it does not replace the applicable
+project or third-party license texts and is not, by itself, a release approval.
 
 ## Source-owned synthetic PDF
 
@@ -45,6 +46,18 @@ project license and is not a public-release approval.
 
 The previous 1.07.4 binaries were removed because their embedded license metadata
 did not match the copied OFL notice.
+
+## Pretendard
+
+- Package: locked `pretendard` 1.3.9 from the npm registry
+- Source asset: `node_modules/pretendard/dist/web/static/woff2/Pretendard-Regular.woff2`
+- SHA-256: `FAD853F7F47C6C8B103171E7193FA095708CDCD70850A71D93AA5379E8A61D63`
+- Distribution: emitted as a viewer asset in every build
+- Use: dynamically loaded only when flattened export encounters PointText that
+  Helvetica cannot encode; the glyphs are rendered into a 4x transparent PNG
+- License: SIL Open Font License 1.1; the package's exact license copy is at
+  `public/third_party_licenses/pretendard-OFL-1.1.txt`
+- Reserved Font Name: Pretendard
 
 ## PDF.js worker, Foxit fonts, and Adobe CMaps
 

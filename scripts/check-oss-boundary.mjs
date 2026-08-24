@@ -40,6 +40,11 @@ assert.equal(packageJson.name, 'inko-pdf-sdk', 'public package name drift')
 assert.equal(packageJson.private, true, 'private root package required')
 assert.equal(packageJson.license, 'Apache-2.0', 'root package license must match LICENSE')
 assert.match(packageJson.scripts?.prepack ?? '', /block-root-package\.mjs/)
+assert.equal(
+  packageJson.dependencies?.['@pdf-lib/fontkit'],
+  undefined,
+  '@pdf-lib/fontkit must remain absent until its complete bundled license closure is proven',
+)
 
 for (const path of ['Pdf_test/pdf 테스트.pdf', 'public/test.pdf']) {
   assert.equal(existsSync(resolve(root, path)), false, `rights-unknown fixture must be absent: ${path}`)
@@ -86,6 +91,34 @@ assert.equal(
   '93FED46019C38BBE566B479D22148E2E8A1E85ADA614ACCB0211C37B2C61C19B',
   'Liberation OFL notice changed'
 )
+
+const pretendardPackage = JSON.parse(
+  readFileSync(resolve(root, 'node_modules/pretendard/package.json'), 'utf8')
+)
+assert.equal(pretendardPackage.version, '1.3.9', 'Pretendard version drift')
+assert.equal(pretendardPackage.license, 'OFL-1.1', 'Pretendard license drift')
+assert.equal(
+  sha256(resolve(root, 'node_modules/pretendard/dist/web/static/woff2/Pretendard-Regular.woff2')),
+  'FAD853F7F47C6C8B103171E7193FA095708CDCD70850A71D93AA5379E8A61D63',
+  'Pretendard font binary changed without provenance review'
+)
+const normalizeLicenseText = (text) => text.replace(/\s+/g, ' ').trim()
+assert.equal(
+  normalizeLicenseText(readFileSync(resolve(root, 'public/third_party_licenses/pretendard-OFL-1.1.txt'), 'utf8')),
+  normalizeLicenseText(readFileSync(resolve(root, 'node_modules/pretendard/dist/LICENSE.txt'), 'utf8')),
+  'Pretendard OFL notice differs from the locked package'
+)
+
+const pakoPackage = JSON.parse(readFileSync(resolve(root, 'node_modules/pako/package.json'), 'utf8'))
+assert.equal(pakoPackage.version, '1.0.11', 'pako version drift')
+assert.equal(pakoPackage.license, '(MIT AND Zlib)', 'pako license expression drift')
+const pakoNotice = readFileSync(resolve(root, 'public/third_party_licenses/pako-MIT-Zlib.txt'), 'utf8')
+const pakoZlibReadme = readFileSync(resolve(root, 'node_modules/pako/lib/zlib/README'), 'utf8')
+assert.ok(
+  normalizeLicenseText(pakoNotice).includes(normalizeLicenseText(pakoZlibReadme)),
+  'pako notice must preserve the locked package zlib README and three redistribution conditions'
+)
+assert.match(pakoNotice, /bundled and minified/, 'pako distribution-change notice missing')
 
 const publicStandardFonts = resolve(root, 'public/standard_fonts')
 const packageStandardFonts = resolve(root, 'node_modules/pdfjs-dist/standard_fonts')
@@ -160,8 +193,9 @@ const publicBoundaryFiles = [
   'docs/architecture.md',
   'docs/data-flow.md',
   'docs/factory-function-pattern.md',
+  'docs/oss/asset-provenance.md',
 ]
-const forbiddenPublicTerms = /Android|window\.conn|PdfViewerPOP|odcId|odcName|USER_NM|USER_ID|REG_DT|CANVAS_ID|SmartOn|SVN|commercial license|internal release candidate|UNLICENSED|5분/iu
+const forbiddenPublicTerms = /Android|window\.conn|PdfViewerPOP|odcId|odcName|USER_NM|USER_ID|REG_DT|CANVAS_ID|SmartOn|SVN|commercial license|internal (?:pre-)?release(?: candidate)?|UNLICENSED|5분/iu
 for (const name of publicBoundaryFiles) {
   const text = readFileSync(resolve(root, name), 'utf8')
   assert.doesNotMatch(text, forbiddenPublicTerms, `host-specific or pre-release wording leaked into ${name}`)

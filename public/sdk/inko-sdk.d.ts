@@ -12,7 +12,68 @@ export interface UserCanvasEntry {
   registeredAt?: string;
   /** @deprecated Legacy alias accepted for compatibility. Use registeredAt. */
   regDt?: string;
+  /** Host-owned extension metadata is accepted but ignored by the viewer. */
   [key: string]: unknown;
+}
+
+export type PdfCanvasFlattenIssueSeverity = 'warning' | 'error';
+
+export type PdfCanvasFlattenIssueCode =
+  | 'INVALID_CANVAS_PAGE'
+  | 'INVALID_PAGE_JSON'
+  | 'PAGE_OUT_OF_RANGE'
+  | 'INVALID_ITEM'
+  | 'UNSUPPORTED_ITEM'
+  | 'UNSUPPORTED_CLIPPING'
+  | 'INVALID_GEOMETRY'
+  | 'ITEM_HIDDEN'
+  | 'SELECTION_UI_SKIPPED'
+  | 'UNSUPPORTED_COLOR'
+  | 'BLEND_MODE_APPROXIMATED'
+  | 'TEXT_STYLE_APPROXIMATED'
+  | 'TEXT_RASTERIZED'
+  | 'TEXT_ENCODING_FAILED'
+  | 'TEXT_RASTERIZATION_FAILED'
+  | 'DRAW_FAILED'
+  | 'VIEWPORT_FAILED';
+
+export interface PdfCanvasFlattenIssue {
+  severity: PdfCanvasFlattenIssueSeverity;
+  code: PdfCanvasFlattenIssueCode;
+  pageNumber?: number;
+  itemPath?: string;
+  sourceType?: string;
+  message: string;
+}
+
+export interface PdfCanvasFlattenPageReport {
+  pageNumber: number;
+  sourceItems: number;
+  flattenedItems: number;
+  skippedItems: number;
+  failedItems: number;
+}
+
+export interface PdfCanvasFlattenReport {
+  totalPdfPages: number;
+  requestedPages: number;
+  flattenedPages: number;
+  sourceItems: number;
+  flattenedItems: number;
+  skippedItems: number;
+  failedItems: number;
+  warnings: number;
+  hasFailures: boolean;
+  rewroteDocument: boolean;
+  issuesTruncated: boolean;
+  omittedIssues: number;
+  pages: PdfCanvasFlattenPageReport[];
+  issues: PdfCanvasFlattenIssue[];
+}
+
+export interface FlattenedPdfExportResult {
+  pdfBytes: ArrayBuffer;
+  report: PdfCanvasFlattenReport;
 }
 
 export interface ViewerTheme {
@@ -114,6 +175,14 @@ export interface ViewerInstance {
    * This binary export is separate from Paper.js canvasData and does not flatten Inko drawings.
    */
   exportPdf(): Promise<ArrayBuffer>;
+  /**
+   * Export a standalone PDF with current AcroForm values and supported Inko Paper
+   * annotation types flattened into page content. Unsupported or failed items are
+   * reported. The returned PDF does not contain editable canvasData. Inspect
+   * report.hasFailures before accepting the file.
+   * Rewriting page content cannot preserve an existing CMS/PAdES signature.
+   */
+  exportFlattenedPdf(): Promise<FlattenedPdfExportResult>;
   /** Clear annotations on the current page */
   clear(): void;
   /** Apply theme / tools / locale / messages at runtime (partial update) */
@@ -138,6 +207,7 @@ export interface InkoStatic {
     LOAD_USER_CANVAS: 'loadUserCanvasData';
     SAVE_CANVAS: 'saveCanvas';
     EXPORT_PDF: 'exportPdf';
+    EXPORT_FLATTENED_PDF: 'exportFlattenedPdf';
     CLEAR_CANVAS: 'clearCurrentCanvas';
     APPLY_CONFIG: 'applyConfig';
     VIEWER_READY: 'viewerReady';
@@ -145,6 +215,7 @@ export interface InkoStatic {
     CANVAS_CHANGED: 'canvasDataChanged';
     SAVE_RESPONSE: 'saveCanvasResponse';
     EXPORT_PDF_RESPONSE: 'exportPdfResponse';
+    EXPORT_FLATTENED_PDF_RESPONSE: 'exportFlattenedPdfResponse';
     CLOSE_VIEWER: 'closeViewer';
     SET_ORIENTATION: 'setOrientation';
   }>;

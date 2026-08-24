@@ -10,6 +10,7 @@ const viewerMock = vi.hoisted(() => {
     div: HTMLDivElement | null = null
     cancelled = false
     options: any
+    renderOptions: any = null
     cancel = vi.fn(() => { this.cancelled = true })
     hasEditableAnnotations = vi.fn(() => true)
 
@@ -19,6 +20,7 @@ const viewerMock = vi.hoisted(() => {
     }
 
     async render(options: any) {
+      this.renderOptions = options
       this.div = document.createElement('div')
       this.div.className = 'annotationLayer'
       this.options.onAppend?.(this.div)
@@ -68,10 +70,11 @@ describe('createPdfAnnotationLayer', () => {
     document.body.replaceChildren()
   })
 
-  it('문서의 shared annotationStorage와 annotationCanvasMap을 builder에 그대로 전달한다', async () => {
+  it('문서 storage·canvas map과 shared structure tree를 builder에 그대로 전달한다', async () => {
     const pdfDocument = createDocument()
     const host = document.createElement('div')
     const annotationCanvasMap = new Map<string, HTMLCanvasElement>()
+    const structTreeLayer = { marker: 'shared-structure-tree' } as any
     const linkService = {} as any
     const layer = createPdfAnnotationLayer({
       pdfDocument,
@@ -80,7 +83,13 @@ describe('createPdfAnnotationLayer', () => {
       onAppend: (div) => host.append(div)
     })
 
-    const div = await layer.render({ pdfPage, viewport, readOnly: false, annotationCanvasMap })
+    const div = await layer.render({
+      pdfPage,
+      viewport,
+      readOnly: false,
+      annotationCanvasMap,
+      structTreeLayer
+    })
     const instance = viewerMock.instances[0]
 
     expect(instance.options.annotationStorage).toBe(pdfDocument.annotationStorage)
@@ -89,6 +98,7 @@ describe('createPdfAnnotationLayer', () => {
     expect(instance.options.imageResourcesPath).toBe('/assets/pdfjs-images/')
     expect(instance.options.renderForms).toBe(true)
     expect(instance.options.enableScripting).toBe(false)
+    expect(instance.renderOptions).toEqual({ viewport, intent: 'display', structTreeLayer })
     await expect(instance.options.hasJSActionsPromise).resolves.toBe(true)
     await expect(instance.options.fieldObjectsPromise).resolves.toEqual({ field: [] })
     expect(div).toBe(host.firstElementChild)

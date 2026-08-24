@@ -28,6 +28,7 @@ export function createShapeTools(options: ShapeToolsOptions) {
   let handlePointerDown: ((e: PointerEvent) => void) | null = null
   let handlePointerMove: ((e: PointerEvent) => void) | null = null
   let handlePointerUp: ((e: PointerEvent) => void) | null = null
+  let handleKeyDown: ((e: KeyboardEvent) => void) | null = null
 
   /**
    * PointerEvent 좌표 → Paper.js project 좌표 변환
@@ -113,10 +114,22 @@ export function createShapeTools(options: ShapeToolsOptions) {
       try { canvasElement!.releasePointerCapture(e.pointerId) } catch {}
     }
 
+    handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target !== canvasElement ||
+        e.key !== 'Enter' ||
+        e.repeat ||
+        e.ctrlKey || e.metaKey || e.altKey || e.shiftKey ||
+        activePointerId !== null
+      ) return
+      if (createDefaultShapeAtCenter()) e.preventDefault()
+    }
+
     canvasElement.addEventListener('pointerdown', handlePointerDown)
     canvasElement.addEventListener('pointermove', handlePointerMove)
     canvasElement.addEventListener('pointerup', handlePointerUp)
     canvasElement.addEventListener('pointercancel', handlePointerUp)
+    canvasElement.addEventListener('keydown', handleKeyDown)
   }
 
   /**
@@ -198,6 +211,26 @@ export function createShapeTools(options: ShapeToolsOptions) {
     }
   }
 
+  /** 키보드 Enter용 결정적 중앙 도형. 포인터 경로와 같은 add API/callback을 사용한다. */
+  function createDefaultShapeAtCenter(): paper.Item | null {
+    const scope = getScope()
+    if (!scope?.view || !currentShape) return null
+    scope.activate()
+    const bounds = scope.view.bounds
+    const center = bounds.center
+    const shorterSide = Math.min(bounds.width, bounds.height)
+    const size = Math.min(120, Math.max(40, shorterSide * 0.2))
+
+    switch (currentShape) {
+      case 'rectangle':
+        return addRectangle(center.x - size / 2, center.y - size * 0.35, size, size * 0.7)
+      case 'circle':
+        return addCircle(center.x, center.y, size / 2)
+      case 'line':
+        return addLine(center.x - size / 2, center.y, center.x + size / 2, center.y)
+    }
+  }
+
   /**
    * Deactivate shape mode
    */
@@ -211,12 +244,14 @@ export function createShapeTools(options: ShapeToolsOptions) {
         canvasElement.removeEventListener('pointerup', handlePointerUp)
         canvasElement.removeEventListener('pointercancel', handlePointerUp)
       }
+      if (handleKeyDown) canvasElement.removeEventListener('keydown', handleKeyDown)
     }
 
     canvasElement = null
     handlePointerDown = null
     handlePointerMove = null
     handlePointerUp = null
+    handleKeyDown = null
     activePointerId = null
     isActive = false
     currentShape = null
@@ -310,6 +345,7 @@ export function createShapeTools(options: ShapeToolsOptions) {
     activate,
     deactivate,
     cancelOperation,
+    createDefaultShapeAtCenter,
     addRectangle,
     addCircle,
     addLine

@@ -5,6 +5,7 @@
  */
 import paper from 'paper'
 import { createSelectionBox, type SelectionBox } from '../canvas/selectionBox.svelte'
+import { getKeyboardEditablePaperItems } from '../accessibility/paperCanvasKeyboard'
 import { getInputConfig } from '../utils/inputDetection'
 
 export interface SelectionModeOptions {
@@ -199,21 +200,37 @@ export function createSelectionMode(options: SelectionModeOptions) {
     }
 
     handleKeyDown = (e: KeyboardEvent) => {
-      // 텍스트 입력 중(input/textarea/contentEditable)에는 Delete/Backspace를 가로채지 않음.
-      // TextInputOverlay textarea에서 한글 지우려고 Backspace 누를 때 객체가 삭제되는 버그 방지
-      const target = e.target as HTMLElement | null
-      if (target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      )) {
+      // 캔버스가 직접 포커스를 가진 경우에만 처리한다. Tab과 다른 전역 단축키는 가로채지 않는다.
+      if (e.target !== canvasElement || e.ctrlKey || e.metaKey || e.altKey) return
+
+      if (e.key === 'Enter') {
+        if (e.repeat) return
+        if (selectRelative(e.shiftKey ? -1 : 1)) e.preventDefault()
         return
       }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (!selectedItem) return
+        e.preventDefault()
         deleteSelected()
-      } else if (e.key === 'Escape') {
-        clearSelection()
+        return
       }
+
+      if (e.key === 'Escape') {
+        if (!selectedItem) return
+        e.preventDefault()
+        clearSelection()
+        return
+      }
+
+      const distance = e.shiftKey ? 10 : 1
+      const delta = e.key === 'ArrowLeft' ? [-distance, 0] :
+        e.key === 'ArrowRight' ? [distance, 0] :
+        e.key === 'ArrowUp' ? [0, -distance] :
+        e.key === 'ArrowDown' ? [0, distance] : null
+      if (!delta || !selectedItem) return
+      e.preventDefault()
+      moveSelected(delta[0], delta[1])
     }
 
     // 터치 드래그 시 브라우저 스크롤 방지 -- 아이템/핸들 터치 시에만 preventDefault
@@ -259,7 +276,7 @@ export function createSelectionMode(options: SelectionModeOptions) {
     canvasElement.addEventListener('pointermove', handlePointerMove)
     canvasElement.addEventListener('pointerup', handlePointerUp)
     canvasElement.addEventListener('pointercancel', handlePointerUp)
-    document.addEventListener('keydown', handleKeyDown)
+    canvasElement.addEventListener('keydown', handleKeyDown)
   }
 
   /**
@@ -362,6 +379,23 @@ export function createSelectionMode(options: SelectionModeOptions) {
     onSelectionChange?.(true)
   }
 
+  /** Enter/Shift+Enter로 실제 편집 객체만 앞/뒤 순환 선택 */
+  function selectRelative(direction: 1 | -1): paper.Item | null {
+    const scope = getScope()
+    if (!scope) return null
+    const items = getKeyboardEditablePaperItems(scope)
+    if (items.length === 0) {
+      clearSelection()
+      return null
+    }
+    const currentIndex = selectedItem ? items.indexOf(selectedItem) : -1
+    const nextIndex = currentIndex < 0
+      ? (direction === 1 ? 0 : items.length - 1)
+      : (currentIndex + direction + items.length) % items.length
+    selectItem(items[nextIndex])
+    return items[nextIndex]
+  }
+
   /** 선택 해제 */
   function clearSelection() {
     selectedItem = null
@@ -401,7 +435,7 @@ export function createSelectionMode(options: SelectionModeOptions) {
         canvasElement.removeEventListener('pointercancel', handlePointerUp)
       }
     }
-    if (handleKeyDown) document.removeEventListener('keydown', handleKeyDown)
+    if (canvasElement && handleKeyDown) canvasElement.removeEventListener('keydown', handleKeyDown)
 
     canvasElement = null
     handleTouchStart = null
@@ -441,6 +475,8 @@ export function createSelectionMode(options: SelectionModeOptions) {
     toggle,
     cancelOperation,
     selectItem,
+    selectNext: () => selectRelative(1),
+    selectPrevious: () => selectRelative(-1),
     clearSelection,
     deleteSelected,
     moveSelected

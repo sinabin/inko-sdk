@@ -8,6 +8,7 @@ import { execSync } from 'node:child_process'
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createPublicPackageBuildEnv } from './release/public-build-policy.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(scriptDir, '..')
@@ -16,12 +17,17 @@ const sourcePackage = JSON.parse(readFileSync(resolve(root, 'package.json'), 'ut
 const version = sourcePackage.version
 
 console.log(`\nBuilding ${sourcePackage.name} v${version}...\n`)
+const publicBuildEnv = createPublicPackageBuildEnv(process.env)
 
 rmSync(release, { recursive: true, force: true })
 mkdirSync(release, { recursive: true })
 
 console.log('Building the viewer...')
-execSync('npm run build', { cwd: root, stdio: 'inherit' })
+execSync('npm run build', {
+  cwd: root,
+  stdio: 'inherit',
+  env: publicBuildEnv
+})
 
 console.log('\nStaging the public package...')
 cpSync(resolve(root, 'dist'), resolve(release, 'viewer'), { recursive: true })

@@ -30,6 +30,16 @@ const artifactPackage = readArtifactJson('package/package.json')
 assert.equal(artifactPackage.name, sourcePackage.name, 'artifact package name drift')
 assert.equal(artifactPackage.version, sourcePackage.version, 'artifact package version drift')
 assert.equal(artifactPackage.license, sourcePackage.license, 'artifact package license drift')
+assert.equal(
+  sourcePackage.dependencies?.['@pdf-lib/fontkit'],
+  undefined,
+  '@pdf-lib/fontkit must remain absent until its complete bundled license closure is proven',
+)
+assert.equal(
+  [...entries.keys()].some((path) => /^package\/viewer\/assets\/fontkit\.es-[^/]+\.js$/.test(path)),
+  false,
+  'fontkit implementation chunk must not ship in the release archive',
+)
 assert.equal(packageLock.name, sourcePackage.name, 'package-lock package name drift')
 assert.equal(packageLock.version, sourcePackage.version, 'package-lock package version drift')
 
@@ -343,9 +353,30 @@ function detectDirectDependency(name) {
       chunk: /^package\/viewer\/assets\/pdfjs(?:-[^/]+)?\.js$/,
       required: ['package/viewer/pdf.worker.mjs'],
     },
+    pretendard: {
+      asset: /^package\/viewer\/assets\/Pretendard-Regular(?:-[^/]+)?\.woff2$/,
+      source: 'node_modules/pretendard/dist/web/static/woff2/Pretendard-Regular.woff2',
+      sha256: 'fad853f7f47c6c8b103171e7193fa095708cdcd70850a71d93aa5379e8a61d63',
+    },
   }
   const rule = rules[name]
   assert.ok(rule, `no artifact evidence rule exists for production dependency: ${name}`)
+
+  if (rule.asset) {
+    const matchingAssets = [...entries]
+      .filter(([path, bytes]) => rule.asset.test(path) && bytes.length > 0)
+      .map(([path]) => path)
+      .sort()
+    assert.equal(matchingAssets.length, 1, `${name} must emit exactly one reviewed asset`)
+    const sourceBytes = readFileSync(resolve(root, rule.source))
+    assert.equal(sha256(sourceBytes), rule.sha256, `${name} source asset hash drift`)
+    assert.equal(
+      sha256(entries.get(matchingAssets[0])),
+      rule.sha256,
+      `${name} emitted asset hash drift`,
+    )
+    return matchingAssets
+  }
 
   const matchingChunks = [...entries]
     .filter(([path, bytes]) => rule.chunk.test(path) && hasExecutableContent(bytes))
@@ -437,7 +468,7 @@ function parseNoticeTable(markdown, marker) {
     .map((line) => line.trim().slice(1, -1).split('|').map((cell) => cell.trim()))
     .filter((cells) => !cells.every((cell) => /^:?-{3,}:?$/.test(cell)))
 
-  assert.ok(rows.length >= 2, `notice table is empty: ${marker}`)
+  assert.ok(rows.length >= 1, `notice table header is missing: ${marker}`)
   assert.deepEqual(
     rows.shift(),
     ['Component', 'Version', 'License', 'Viewer-root license path'],

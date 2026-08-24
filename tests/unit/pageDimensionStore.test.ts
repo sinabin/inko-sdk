@@ -25,6 +25,22 @@ function deferred<T>() {
 }
 
 describe('pageDimensionStore — 문서 generation', () => {
+  it('렌더 실측 치수는 유효한 변경만 반영하고 동일 치수 갱신은 생략', async () => {
+    const store = createPageDimensionStore()
+    await store.loadDocument({ getPage: async () => pdfPage(612, 792) }, 1)
+
+    expect(store.set(1, { width: 613, height: 793 })).toBe(true)
+    expect(store.get(1)).toEqual({ width: 613, height: 793 })
+    expect(store.set(1, { width: 613.25, height: 793.25 })).toBe(false)
+    expect(() => store.set(0, { width: 600, height: 800 })).toThrow(
+      'pageNumber must be a positive integer'
+    )
+    expect(() => store.set(1, { width: Number.NaN, height: 800 })).toThrow(
+      'page dimensions must be finite positive numbers'
+    )
+    expect(store.get(1)).toEqual({ width: 613, height: 793 })
+  })
+
   it('1.0x 페이지 치수를 수집하고 현재 문서의 페이지 오류만 보고', async () => {
     const onPageError = vi.fn()
     const store = createPageDimensionStore({ initialPageCount: 2, onPageError })
@@ -135,6 +151,7 @@ describe('pageDimensionStore — dispose와 인스턴스 격리', () => {
     expect(store.generation).toBe(generation + 1)
     expect(store.isLoading).toBe(false)
     expect(store.getAll().size).toBe(0)
+    expect(store.set(1, { width: 612, height: 792 })).toBe(false)
     await expect(store.loadDocument(null, 0)).rejects.toThrow(
       'PageDimensionStore has been disposed'
     )

@@ -72,6 +72,7 @@ viewer.loadPdfBase64(base64, fileName?, canvasData?, readOnly?)
 viewer.loadUserCanvasOverlay(entries)
 viewer.save()
 const pdfBytes = await viewer.exportPdf()
+const flattened = await viewer.exportFlattenedPdf()
 viewer.clear()
 viewer.applyConfig(config)
 viewer.getLastCanvasData()
@@ -106,12 +107,13 @@ Inko.mount('#viewer', {
 
 ## `canvasData` 저장과 PDF 바이너리 내보내기
 
-두 경로는 서로 다른 데이터를 다루며 혼합되지 않습니다.
+세 경로는 목적과 가역성이 다릅니다.
 
 | 경로 | 반환값 | 포함 범위 |
 | --- | --- | --- |
 | `save()` / `onSave` | 불투명 `canvasData` 문자열 | Inko Paper.js 그림·검토 상태. 다시 편집 가능 |
 | `await exportPdf()` | `Promise<ArrayBuffer>` | PDF.js `saveDocument()` 결과. 현재 네이티브 AcroForm 값 포함 |
+| `await exportFlattenedPdf()` | `Promise<{ pdfBytes, report }>` | AcroForm 저장본 + 모든 페이지의 Inko 그림을 PDF content로 평탄화. 다시 편집할 `canvasData`는 미포함 |
 
 ```javascript
 const pdfBytes = await viewer.exportPdf()
@@ -127,6 +129,33 @@ flatten하거나 합성하지 않습니다. 네이티브 양식 값과 Inko 편�
 보존하려면 호스트 앱이 PDF 바이트와 `canvasData`를 각각 저장해야 합니다.
 요청은 SDK 내부 request ID로 응답과 짝지어지며, 뷰어가 파기되거나 응답 시간이
 초과되면 Promise가 reject됩니다.
+
+배포·전달용 PDF가 필요하면 다음처럼 평탄화 결과와 완전성 보고서를 함께 처리합니다.
+
+```javascript
+const { pdfBytes: deliveryPdf, report } = await viewer.exportFlattenedPdf()
+if (report.hasFailures) {
+  console.error('평탄화 누락', report.issues, report.omittedIssues)
+  throw new Error('일부 편집 객체가 PDF에 반영되지 않았습니다')
+}
+await fetch('/api/documents/report-delivery.pdf', {
+  method: 'PUT',
+  headers: { 'content-type': 'application/pdf' },
+  body: deliveryPdf,
+})
+```
+
+평탄화 대상은 펜·형광펜·텍스트·사각형·원·선이며 가상화로 화면에서 내려간
+페이지도 문서 정본 `canvasData`에서 처리합니다. `report.pages`와 `report.issues`는
+페이지·항목 단위 처리 결과를 제공하고, 상세 오류가 1,000개를 넘으면
+`issuesTruncated`와 `omittedIssues`로 생략 수를 알립니다. 지원하지 않거나 손상된
+객체를 조용히 버리지 않습니다.
+
+평탄화 PDF는 다른 PDF 뷰어에서 보이는 전달본이지 Inko 편집 상태 컨테이너가
+아닙니다. 이어서 편집하려면 원본 PDF와 `canvasData`를 별도로 유지하세요. PDF
+content rewrite가 발생하면 `report.rewroteDocument`가 `true`이며, 기존 CMS/PAdES
+암호학적 서명은 보존되지 않습니다. Inko는 인증서 서명·검증·타임스탬프를
+제공한다고 주장하지 않습니다.
 
 `clear()`는 현재 페이지의 편집 상태만 지웁니다. 전체 문서를 초기화하려면 각
 페이지에 대해 호스트 UI에서 명시적인 흐름을 제공하거나 새 빈 상태로 문서를

@@ -115,11 +115,16 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
   let lastScrollTime = 0
   let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null
   let renderQueue: number[] = []
-  let activeRenders = 0
+  const activeRenderTokens = new Set<symbol>()
   // 진행 중 pdf.js 렌더 태스크 — 스케일 변경·가시 범위 이탈 시 취소용
   const activeRenderTasks = new Map<number, RenderTask>()
   const scaleChangeRetryPages = new Set<number>()
   let isDisposed = false
+  let lifecycleGeneration = 0
+
+  function isCurrentLifecycle(generation: number): boolean {
+    return !isDisposed && generation === lifecycleGeneration
+  }
 
   /** 스크롤 속도 측정 및 빠른 스크롤 감지, idle 타이머로 스크롤 멈춤 후 렌더 큐 재개 */
   function handleScroll(): void {
@@ -148,7 +153,7 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
     }, SCROLL_IDLE_DELAY)
   }
 
-  /** 가시성 변경 시 버퍼 범위(뷰포트 +/- 2페이지) 내 미렌더 페이지 요청, 범위 밖 페이지 언로드 */
+  /** 가시성 변경 시 범위 밖 작업을 폐기하고 버퍼 범위(뷰포트 +/- 2페이지)를 렌더 */
   function handleVisibilityChange(visibleRange: VisibleRange): void {
     if (!visibilityManager) return
 
@@ -161,12 +166,14 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       onCurrentPageChange?.(currentPage)
     }
 
-    // 버퍼 범위 내 페이지 렌더링 요청
-    for (let pageNum = bufferedRange.start; pageNum <= bufferedRange.end; pageNum++) {
-      if (!pageStateManager.isRendered(pageNum) && !pageStateManager.isRendering(pageNum)) {
-        requestRender(pageNum)
+    // 빠른 스크롤 동안 processRenderQueue가 멈춰도 지나간 페이지의 queued 작업을
+    // idle 뒤 일괄 렌더하지 않도록 현재 버퍼 밖 항목을 즉시 취소한다.
+    const queuedPages = [...renderQueue]
+    queuedPages.forEach(pageNum => {
+      if (pageNum < bufferedRange.start || pageNum > bufferedRange.end) {
+        cancelRender(pageNum)
       }
-    }
+    })
 
     // 버퍼 범위 밖 페이지 언로드
     const renderedPages = pageStateManager.getRenderedPages()
@@ -182,10 +189,19 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
         task.cancel()
       }
     })
+
+    // 버퍼 범위 내 페이지 렌더링 요청
+    for (let pageNum = bufferedRange.start; pageNum <= bufferedRange.end; pageNum++) {
+      if (!pageStateManager.isRendered(pageNum) && !pageStateManager.isRendering(pageNum)) {
+        requestRender(pageNum)
+      }
+    }
   }
 
   /** 렌더링 요청 — 뷰포트 내 페이지는 큐 앞(unshift), 버퍼 영역 페이지는 큐 뒤(push)에 삽입 */
   function requestRender(pageNum: number): void {
+    if (isDisposed) return
+
     const currentState = pageStateManager.getState(pageNum)
     console.log(`[ScrollMode] requestRender page ${pageNum}, current state: ${currentState}`)
 
@@ -208,6 +224,8 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 렌더링 취소 — 큐에서 제거 후 상태를 idle로 복원 */
   function cancelRender(pageNum: number): void {
+    if (isDisposed) return
+
     const index = renderQueue.indexOf(pageNum)
     if (index > -1) {
       renderQueue.splice(index, 1)
@@ -220,10 +238,10 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 렌더 큐 순차 처리, 빠른 스크롤 중이면 중단, 동시 렌더 수 제한(기본 3개) */
   function processRenderQueue(): void {
-    console.log(`[ScrollMode] processRenderQueue - queue: ${renderQueue.length}, active: ${activeRenders}, fast: ${isScrollingFast}`)
-    if (isScrollingFast) return // 빠른 스크롤 중 렌더링 중지
+    console.log(`[ScrollMode] processRenderQueue - queue: ${renderQueue.length}, active: ${activeRenderTokens.size}, fast: ${isScrollingFast}`)
+    if (isDisposed || isScrollingFast) return // 빠른 스크롤 중 렌더링 중지
 
-    while (renderQueue.length > 0 && activeRenders < maxConcurrentRenders) {
+    while (renderQueue.length > 0 && activeRenderTokens.size < maxConcurrentRenders) {
       const pageNum = renderQueue.shift()
       if (pageNum !== undefined) {
         console.log(`[ScrollMode] Processing page ${pageNum} from queue`)
@@ -234,6 +252,9 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 페이지 렌더링 — 캐시 히트 시 즉시 반환, 미스 시 오프스크린 캔버스에 렌더링 (FSM: queued -> rendering -> rendered) */
   async function renderPage(pageNum: number): Promise<void> {
+    const generation = lifecycleGeneration
+    if (!isCurrentLifecycle(generation)) return
+
     console.log(`[ScrollMode] renderPage ${pageNum} starting`)
     const pdfDoc = getPdfDoc()
     if (!pdfDoc) {
@@ -257,10 +278,13 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       return
     }
 
-    activeRenders++
+    const renderToken = Symbol(`page-${pageNum}`)
+    activeRenderTokens.add(renderToken)
+    let currentTask: RenderTask | null = null
 
     try {
       const page = await pdfDoc.getPage(pageNum)
+      if (!isCurrentLifecycle(generation)) return
 
       // 고해상도 렌더: 표시 크기는 viewportScale(CSS 픽셀) 그대로 두고
       // 백버퍼만 기기 DPR만큼 오버샘플링 → 레티나·모바일에서 원본급 선명도.
@@ -280,7 +304,7 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Cannot get canvas context')
 
-      const renderTask = page.render({
+      currentTask = page.render({
         canvasContext: ctx,
         viewport,
         canvas,
@@ -288,9 +312,10 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
         annotationMode: PDFJS_ANNOTATION_MODE_ENABLE_FORMS,
         annotationCanvasMap
       })
-      activeRenderTasks.set(pageNum, renderTask)
-      await renderTask.promise
-      activeRenderTasks.delete(pageNum)
+      activeRenderTasks.set(pageNum, currentTask)
+      await currentTask.promise
+      if (activeRenderTasks.get(pageNum) === currentTask) activeRenderTasks.delete(pageNum)
+      if (!isCurrentLifecycle(generation)) return
 
       // 렌더 중 스케일이 바뀐 경우 결과 폐기 — 구 스케일 비트맵의 상태·캐시 오염 방지
       if (getViewportScale() !== scale) {
@@ -313,7 +338,11 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       onPageRendered(pageNum, canvas)
 
     } catch (error) {
-      activeRenderTasks.delete(pageNum)
+      if (currentTask && activeRenderTasks.get(pageNum) === currentTask) {
+        activeRenderTasks.delete(pageNum)
+      }
+      if (!isCurrentLifecycle(generation)) return
+
       if ((error as Error)?.name === 'RenderingCancelledException') {
         // 스케일 변경·범위 이탈로 취소됨 — idle 복원 후 가시 영역이면 재요청
         const retryForLatestScale = scaleChangeRetryPages.delete(pageNum)
@@ -327,8 +356,8 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
         pageStateManager.transitionToError(pageNum, error as Error)
       }
     } finally {
-      activeRenders--
-      processRenderQueue()
+      activeRenderTokens.delete(renderToken)
+      if (isCurrentLifecycle(generation)) processRenderQueue()
     }
   }
 
@@ -342,6 +371,8 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 강제 렌더링 — 큐에서 제거 후 즉시 렌더링 실행 */
   async function forceRenderPage(pageNum: number): Promise<void> {
+    if (isDisposed) return
+
     const index = renderQueue.indexOf(pageNum)
     if (index > -1) {
       renderQueue.splice(index, 1)
@@ -442,13 +473,18 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 리소스 정리 — 진행 중 렌더, 타이머, 이벤트 리스너, 매니저, 캐시 해제 */
   function dispose(): void {
+    if (isDisposed) return
+
     isDisposed = true
+    lifecycleGeneration++
     scaleChangeRetryPages.clear()
     activeRenderTasks.forEach(task => task.cancel())
     activeRenderTasks.clear()
+    activeRenderTokens.clear()
 
     if (scrollIdleTimer) {
       clearTimeout(scrollIdleTimer)
+      scrollIdleTimer = null
     }
 
     if (scrollContainer) {

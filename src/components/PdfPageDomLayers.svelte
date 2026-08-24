@@ -6,6 +6,12 @@
     type PdfAnnotationLayer
   } from '../lib/pdf/pdfAnnotationLayer'
   import type { PdfLinkService } from '../lib/pdf/pdfLinkService'
+  import {
+    createPdfStructTreeLayer,
+    type PdfStructTreeLayer
+  } from '../lib/pdf/pdfStructTreeLayer'
+  import { t } from '../lib/i18n/index.svelte'
+  import { applyPdfPageSemantics } from '../lib/accessibility/pdfPageSemantics'
   import '../lib/pdf/pdfjsLayers.css'
 
   export interface PdfPageDomLayersReady {
@@ -108,6 +114,16 @@
 
     const renderGeneration = ++componentGeneration
     const restoreScale = applyScaleProperties(container, viewport)
+    const pageNumber = pdfPage.pageNumber
+    const pageSemantics = applyPdfPageSemantics(container, {
+      pageRegion: t('document.pageRegion', { n: pageNumber }),
+      pageText: t('document.pageText', { n: pageNumber }),
+      pageAnnotations: t('document.pageAnnotations', { n: pageNumber }),
+      annotationControl: (index) => t('document.annotationControl', { n: pageNumber, index }),
+      editableCanvas: t('document.editableCanvas', { n: pageNumber }),
+      reviewCanvas: t('document.reviewCanvas', { n: pageNumber })
+    })
+    let structTreeLayer: PdfStructTreeLayer | null = null
     const nextTextLayer = createPdfTextLayer({
       enablePermissions: enableTextPermissions,
       onAppend: (div) => {
@@ -124,20 +140,45 @@
     textLayer = nextTextLayer
     annotationLayer = nextAnnotationLayer
 
-    void Promise.all([
-      nextTextLayer.render({ pdfPage, viewport }),
-      nextAnnotationLayer.render({
-        pdfPage,
-        viewport,
-        readOnly,
-        annotationCanvasMap
-      })
-    ]).then(([textRendered, annotationDiv]) => {
+    void createPdfStructTreeLayer(pdfPage, viewport).then(async (nextStructTreeLayer) => {
+      if (renderGeneration !== componentGeneration) {
+        nextStructTreeLayer.dispose()
+        return
+      }
+      structTreeLayer = nextStructTreeLayer
+
+      const [textRendered, annotationDiv] = await Promise.all([
+        nextTextLayer.render({ pdfPage, viewport }),
+        nextAnnotationLayer.render({
+          pdfPage,
+          viewport,
+          readOnly,
+          annotationCanvasMap,
+          structTreeLayer: nextStructTreeLayer.builder
+        })
+      ])
       if (
         renderGeneration !== componentGeneration ||
         textLayer !== nextTextLayer ||
         annotationLayer !== nextAnnotationLayer
-      ) return
+      ) {
+        nextStructTreeLayer.dispose()
+        return
+      }
+
+      try {
+        await nextStructTreeLayer.renderInto(
+          container.querySelector<HTMLCanvasElement>('.scroll-page-canvas-pdf')
+        )
+      } catch (error) {
+        if (renderGeneration === componentGeneration) reportError(error)
+      }
+      if (renderGeneration !== componentGeneration) {
+        nextStructTreeLayer.dispose()
+        return
+      }
+
+      pageSemantics.markReady()
 
       onReady?.({
         pageNumber: pdfPage.pageNumber,
@@ -150,6 +191,8 @@
 
     return () => {
       componentGeneration++
+      pageSemantics.dispose()
+      structTreeLayer?.dispose()
       nextTextLayer.dispose()
       nextAnnotationLayer.dispose()
       if (textLayer === nextTextLayer) textLayer = null

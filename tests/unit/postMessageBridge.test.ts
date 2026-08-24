@@ -17,6 +17,7 @@ import {
   sendPdfLoaded,
   sendCanvasDataChanged,
   sendSaveCanvasResponse,
+  sendExportFlattenedPdfResponse,
   sendExportPdfResponse,
   sendCloseRequest,
   sendSetOrientation,
@@ -109,9 +110,11 @@ describe('initPostMessageBridge — 메시지 수신 라우팅', () => {
       onLoadUserCanvasData: vi.fn(),
       onSaveCanvas: vi.fn(),
       onExportPdf: vi.fn(),
-      onClearCanvas: vi.fn()
+      onExportFlattenedPdf: vi.fn(),
+      onClearCanvas: vi.fn(),
+      onApplyConfig: vi.fn()
     }
-    cleanup = initPostMessageBridge(cb)
+    cleanup = initPostMessageBridge(cb, undefined, null)
   })
 
   afterEach(() => cleanup())
@@ -148,8 +151,8 @@ describe('initPostMessageBridge — 메시지 수신 라우팅', () => {
     expect(cb.onSaveCanvas).toHaveBeenCalled()
     dispatch('clearCurrentCanvas')
     expect(cb.onClearCanvas).toHaveBeenCalled()
-    dispatch('loadUserCanvasData', [{ id: 1 }])
-    expect(cb.onLoadUserCanvasData).toHaveBeenCalledWith([{ id: 1 }])
+    dispatch('loadUserCanvasData', [{ canvasId: '1', canvasData: '{}' }])
+    expect(cb.onLoadUserCanvasData).toHaveBeenCalledWith([{ canvasId: '1', canvasData: '{}' }])
   })
 
   it('exportPdf는 유효한 requestId만 별도 콜백으로 라우팅한다', () => {
@@ -159,6 +162,15 @@ describe('initPostMessageBridge — 메시지 수신 라우팅', () => {
     expect(cb.onExportPdf).toHaveBeenCalledTimes(1)
     expect(cb.onExportPdf).toHaveBeenCalledWith('inko-export-1')
     expect(cb.onSaveCanvas).not.toHaveBeenCalled()
+  })
+
+  it('exportFlattenedPdf는 독립 requestId 콜백으로만 라우팅한다', () => {
+    dispatch('exportFlattenedPdf', { requestId: 'inko-flatten-1' })
+    dispatch('exportFlattenedPdf', { requestId: '' })
+    dispatch('exportFlattenedPdf', { requestId: 'x'.repeat(129) })
+    expect(cb.onExportFlattenedPdf).toHaveBeenCalledTimes(1)
+    expect(cb.onExportFlattenedPdf).toHaveBeenCalledWith('inko-flatten-1')
+    expect(cb.onExportPdf).not.toHaveBeenCalled()
   })
 
   it('알 수 없는 type은 무시 (예외 없음)', () => {
@@ -191,9 +203,11 @@ describe('initPostMessageBridge — origin 보안 검증', () => {
       onLoadUserCanvasData: vi.fn(),
       onSaveCanvas: vi.fn(),
       onExportPdf: vi.fn(),
-      onClearCanvas: vi.fn()
+      onExportFlattenedPdf: vi.fn(),
+      onClearCanvas: vi.fn(),
+      onApplyConfig: vi.fn()
     }
-    cleanup = initPostMessageBridge(cb)
+    cleanup = initPostMessageBridge(cb, undefined, null)
   })
 
   afterEach(() => cleanup())
@@ -247,7 +261,7 @@ describe('initPostMessageBridge — origin 보안 검증', () => {
     cleanup = initPostMessageBridge(cb, new Set(getViewerReadyTargetOrigins(
       window.location.origin,
       `${originA},${originB}`
-    )))
+    )), null)
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     dispatchFrom(originA, 'saveCanvas')
@@ -269,7 +283,7 @@ describe('initPostMessageBridge — origin 보안 검증', () => {
     __resetTrustedParentOriginForTesting()
     const originA = 'https://host-a.example.com'
     const originB = 'https://host-b.example.com'
-    cleanup = initPostMessageBridge(cb, new Set([originA, originB]))
+    cleanup = initPostMessageBridge(cb, new Set([originA, originB]), null)
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     dispatchFrom(originA, 'unknownCommand')
@@ -293,9 +307,32 @@ describe('initPostMessageBridge — origin 보안 검증', () => {
     expect(cb.onSaveCanvas).not.toHaveBeenCalled()
   })
 
-  it('loadUserCanvasData 페이로드가 배열 아니면 빈 배열로 정규화', () => {
+  it('loadUserCanvasData 페이로드가 유효한 배열이 아니면 거부', () => {
     dispatchFrom(window.location.origin, 'loadUserCanvasData', { not: 'array' })
-    expect(cb.onLoadUserCanvasData).toHaveBeenCalledWith([])
+    expect(cb.onLoadUserCanvasData).not.toHaveBeenCalled()
+  })
+
+  it('스키마가 잘못된 알려진 요청은 origin을 선점하지 못한다', () => {
+    cleanup()
+    __resetTrustedParentOriginForTesting()
+    const originA = 'https://host-a.example.com'
+    const originB = 'https://host-b.example.com'
+    cleanup = initPostMessageBridge(cb, new Set([originA, originB]), null)
+
+    dispatchFrom(originA, 'loadPdfBase64', { base64: '' })
+    dispatchFrom(originB, 'saveCanvas')
+
+    expect(cb.onSaveCanvas).toHaveBeenCalledTimes(1)
+  })
+
+  it('기본 source 정책은 null source를 부모로 간주하지 않는다', () => {
+    cleanup()
+    __resetTrustedParentOriginForTesting()
+    cleanup = initPostMessageBridge(cb)
+
+    dispatchFrom(window.location.origin, 'saveCanvas')
+
+    expect(cb.onSaveCanvas).not.toHaveBeenCalled()
   })
 })
 
@@ -311,9 +348,11 @@ describe('initPostMessageBridge — 페이로드 스키마 검증', () => {
       onLoadUserCanvasData: vi.fn(),
       onSaveCanvas: vi.fn(),
       onExportPdf: vi.fn(),
-      onClearCanvas: vi.fn()
+      onExportFlattenedPdf: vi.fn(),
+      onClearCanvas: vi.fn(),
+      onApplyConfig: vi.fn()
     }
-    cleanup = initPostMessageBridge(cb)
+    cleanup = initPostMessageBridge(cb, undefined, null)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
@@ -352,6 +391,14 @@ describe('initPostMessageBridge — 페이로드 스키마 검증', () => {
     expect(cb.onLoadPdfFromUrl).not.toHaveBeenCalled()
   })
 
+  it('loadPdfFromUrl: protocol-relative·backslash·credentials URL 거부', () => {
+    dispatch('loadPdfFromUrl', { url: '//evil.example.com/a.pdf' })
+    dispatch('loadPdfFromUrl', { url: '/\\evil.example.com/a.pdf' })
+    dispatch('loadPdfFromUrl', { url: 'https://user:secret@example.com/a.pdf' })
+    dispatch('loadPdfFromUrl', { url: ' https://example.com/a.pdf' })
+    expect(cb.onLoadPdfFromUrl).not.toHaveBeenCalled()
+  })
+
   it('loadPdfFromUrl: http(s)·blob:·절대경로 허용', () => {
     dispatch('loadPdfFromUrl', { url: 'https://example.com/a.pdf', fileName: 'a.pdf' })
     dispatch('loadPdfFromUrl', { url: 'blob:http://x/y' })
@@ -363,6 +410,74 @@ describe('initPostMessageBridge — 페이로드 스키마 검증', () => {
     dispatch('loadPdfFromUrl', { url: 'http://x/a.pdf', canvasData: 12345 })
     expect(cb.onLoadPdfFromUrl).not.toHaveBeenCalled()
   })
+
+  it('canvasData가 64MiB 한도를 넘으면 PDF 로드를 거부', () => {
+    const oversized = 'x'.repeat(64 * 1024 * 1024 + 1)
+    dispatch('loadPdfFromUrl', { url: '/a.pdf', canvasData: oversized })
+    expect(cb.onLoadPdfFromUrl).not.toHaveBeenCalled()
+  })
+
+  it('검토본 목록의 개수와 canvasData 필수값을 제한', () => {
+    dispatch('loadUserCanvasData', Array.from({ length: 257 }, (_, index) => ({
+      canvasId: String(index),
+      canvasData: '{}'
+    })))
+    dispatch('loadUserCanvasData', [{ canvasId: 'missing-data' }])
+    expect(cb.onLoadUserCanvasData).not.toHaveBeenCalled()
+  })
+
+  it('검토본의 확장 메타데이터를 허용하되 내부 경계에서는 공개 필드만 전달', () => {
+    const entry = {
+      canvasId: 'review-1',
+      userName: 'Reviewer',
+      canvasData: '{}',
+      audit: {
+        source: 'host',
+        approvals: [{ reviewer: 'qa', accepted: true }]
+      },
+      reviewedAt: new Date('2026-08-25T00:00:00Z'),
+      lookup: new Map([['source', 'host']])
+    }
+
+    dispatch('loadUserCanvasData', [entry])
+
+    expect(cb.onLoadUserCanvasData).toHaveBeenCalledWith([{
+      canvasId: 'review-1',
+      userName: 'Reviewer',
+      canvasData: '{}'
+    }])
+  })
+
+  it('사용하는 검토본 필드의 문자열·전체 필드 수 한도를 적용', () => {
+    dispatch('loadUserCanvasData', [{
+      canvasId: 'oversized',
+      canvasData: '{}',
+      userName: 'x'.repeat(10_001)
+    }])
+
+    const tooManyFields: Record<string, unknown> = {
+      canvasId: 'too-many-fields',
+      canvasData: '{}'
+    }
+    for (let index = 0; index < 4096; index++) tooManyFields[`field-${index}`] = index
+    dispatch('loadUserCanvasData', [{
+      ...tooManyFields
+    }])
+
+    expect(cb.onLoadUserCanvasData).not.toHaveBeenCalled()
+  })
+
+  it('applyConfig의 순환 참조와 과도한 깊이를 거부', () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    let deep: Record<string, unknown> = { leaf: true }
+    for (let depth = 0; depth < 9; depth++) deep = { next: deep }
+
+    dispatch('applyConfig', circular)
+    dispatch('applyConfig', deep)
+
+    expect(cb.onApplyConfig).not.toHaveBeenCalled()
+  })
 })
 
 describe('postMessage 송신 함수들 — 부모 없으면 silent', () => {
@@ -372,6 +487,7 @@ describe('postMessage 송신 함수들 — 부모 없으면 silent', () => {
       sendCanvasDataChanged('data')
       sendSaveCanvasResponse('data', true, 'ok')
       sendExportPdfResponse('request-1', true, new ArrayBuffer(4))
+      sendExportFlattenedPdfResponse('request-2', false, undefined, undefined, 'failed')
       sendCloseRequest()
       sendSetOrientation('landscape')
     }).not.toThrow()

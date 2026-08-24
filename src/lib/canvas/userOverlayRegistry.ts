@@ -11,14 +11,14 @@ function assertPageNumber(pageNumber: number): void {
 }
 
 /** 페이지별 사용자 overlay 인스턴스의 교체·해제 소유권 관리 */
-export function createUserOverlayRegistry(
+export function createUserOverlayRegistry<TOverlay extends UserOverlayPort = UserOverlayPort>(
   options: UserOverlayRegistryOptions = {}
 ) {
   const { onDisposeError } = options
-  const overlays = new Map<number, UserOverlayPort>()
+  const overlays = new Map<number, TOverlay>()
   let disposed = false
 
-  function safeDispose(pageNumber: number, overlay: UserOverlayPort): void {
+  function safeDispose(pageNumber: number, overlay: TOverlay): void {
     try {
       overlay.dispose()
     } catch (error) {
@@ -31,7 +31,7 @@ export function createUserOverlayRegistry(
   }
 
   /** overlay 등록. 오래된 cleanup은 같은 페이지의 새 overlay를 제거하지 않음 */
-  function register(pageNumber: number, overlay: UserOverlayPort): () => void {
+  function register(pageNumber: number, overlay: TOverlay): () => void {
     assertPageNumber(pageNumber)
     if (disposed) {
       safeDispose(pageNumber, overlay)
@@ -60,7 +60,7 @@ export function createUserOverlayRegistry(
   }
 
   /** 페이지 overlay 조건부 해제. 같은 cleanup 반복 호출은 무해 */
-  function unregister(pageNumber: number, overlay?: UserOverlayPort): boolean {
+  function unregister(pageNumber: number, overlay?: TOverlay): boolean {
     assertPageNumber(pageNumber)
     const current = overlays.get(pageNumber)
     if (!current || (overlay && current !== overlay)) return false
@@ -69,12 +69,12 @@ export function createUserOverlayRegistry(
     return true
   }
 
-  function get(pageNumber: number): UserOverlayPort | null {
+  function get(pageNumber: number): TOverlay | null {
     assertPageNumber(pageNumber)
     return overlays.get(pageNumber) ?? null
   }
 
-  function getAll(): Map<number, UserOverlayPort> {
+  function getAll(): Map<number, TOverlay> {
     return new Map(overlays)
   }
 

@@ -77,6 +77,7 @@ if (existsSync(resolve(root, '.git'))) {
 for (const required of [
   '.github/workflows/ci.yml',
   '.github/workflows/release.yml',
+  '.github/workflows/visual-review.yml',
   '.gitleaks.toml',
   'LICENSE',
   'NOTICE',
@@ -87,7 +88,11 @@ for (const required of [
   'TRADEMARKS.md',
   'package.json',
   'package-lock.json',
+  'playwright.accessibility.config.ts',
+  'playwright.config.ts',
+  'playwright.production.config.ts',
   'playwright.perf.config.ts',
+  'playwright.visual.config.ts',
   'public/THIRD_PARTY_NOTICES.md',
   'public/sdk/pdfv-sdk.js',
   'public/sdk/inko-sdk.d.ts',
@@ -95,6 +100,10 @@ for (const required of [
   'public/samples/inko-feature-surface.pdf',
   'public/pdfjs-images/manifest.json',
   'public/pdfjs-images/LICENSE.pdfjs-dist',
+  'src/lib/accessibility/paperCanvasKeyboard.ts',
+  'src/lib/pdf/pdfCanvasFlatten.ts',
+  'src/lib/pdf/pdfFlattenFont.ts',
+  'src/lib/pdf/pdfStructTreeLayer.ts',
   'docs/performance.md',
   'scripts/fixtures/generate-pdf-feature-surface.py',
   'scripts/perf/generate-fixture.d.mts',
@@ -102,6 +111,7 @@ for (const required of [
   'scripts/perf/serve-performance-build.mjs',
   'scripts/release/export-public-source.mjs',
   'scripts/release/generate-artifact-sbom.mjs',
+  'scripts/release/public-build-policy.mjs',
   'scripts/release/verify-public-tree.mjs',
   'scripts/release/verify-release-package.mjs',
   'tests/release/verify-installed-tarball.mjs',
@@ -109,6 +119,19 @@ for (const required of [
   'tests/perf/fixture-manifest.json',
   'tests/perf/host.html',
   'tests/perf/performance-120p.spec.ts',
+  'tests/e2e/accessibility-core.spec.ts',
+  'tests/e2e/sdk-roundtrip.spec.ts',
+  'tests/e2e/standalone-local-history.dev.spec.ts',
+  'tests/unit/publicBuildPolicy.test.ts',
+  'tests/unit/pdfCanvasFlatten.test.ts',
+  'tests/unit/pdfCanvasFlatten.integration.test.ts',
+  'tests/unit/pdfStructTreeLayer.test.ts',
+  'tests/unit/pdfPageDomLayers.test.ts',
+  'tests/unit/paperCanvasKeyboard.test.ts',
+  'tests/unit/pdfSearchBar.interaction.test.ts',
+  'tests/unit/pdfViewer.lifecycle.test.ts',
+  'tests/visual/REVIEW_CHECKLIST.md',
+  'tests/visual/visual-capture.spec.ts',
 ]) {
   assert.ok(paths.includes(required), `required public file missing: ${required}`)
 }
@@ -129,9 +152,24 @@ assert.equal(
   'public functional E2E must be discovered from tests/e2e instead of a filename allowlist'
 )
 assert.equal(
+  packageJson.scripts?.['test:e2e:production'],
+  'playwright test --config playwright.production.config.ts',
+  'public functional E2E must also run against a production build/preview'
+)
+assert.equal(
+  packageJson.scripts?.['test:a11y'],
+  'playwright test --config playwright.accessibility.config.ts',
+  'public accessibility gate must use the dedicated cross-browser configuration'
+)
+assert.equal(
   packageJson.scripts?.['test:perf'],
   'playwright test --config playwright.perf.config.ts',
   'public 120-page performance regression command required'
+)
+assert.equal(
+  packageJson.scripts?.['test:visual'],
+  'playwright test --config playwright.visual.config.ts',
+  'public visual capture command required'
 )
 assert.match(
   JSON.stringify(packageJson.repository ?? ''),
@@ -147,14 +185,72 @@ assert.equal(
   packageLock.packages?.['node_modules/@vitest/coverage-v8']?.version,
   'coverage provider must be locked to the installed version'
 )
+for (const [section, dependency] of [
+  ['devDependencies', '@axe-core/playwright'],
+  ['dependencies', 'pretendard'],
+]) {
+  assert.equal(
+    packageJson[section]?.[dependency],
+    packageLock.packages?.[`node_modules/${dependency}`]?.version,
+    `${dependency} must use the exact locked version`
+  )
+}
+assert.match(
+  readFileSync(resolve(root, 'scripts/release/public-build-policy.mjs'), 'utf8'),
+  /VITE_STANDALONE_DEMO:\s*''/,
+  'public package build policy must strip the production-E2E standalone fixture flag'
+)
 
 const functionalE2eSpecs = paths.filter((path) => /^tests\/e2e\/.*\.spec\.ts$/.test(path))
 assert.ok(functionalE2eSpecs.length > 0, 'public functional E2E specs missing')
+const allowedDevelopmentSpecs = new Set([
+  // 개발용 standalone 어댑터만 검증한다. 공개 SDK의 호스트 저장 책임과 분리된다.
+  'tests/e2e/standalone-local-history.dev.spec.ts',
+])
 assert.deepEqual(
-  functionalE2eSpecs.filter((path) => /(?:manual|visual|sales|evidence|local-history)/i.test(path)),
+  functionalE2eSpecs.filter((path) =>
+    /(?:manual|visual|sales|evidence|local-history)/i.test(path)
+    && !allowedDevelopmentSpecs.has(path)
+  ),
   [],
-  'manual, visual, sales, evidence, or dev-history specs must not enter public functional E2E'
+  'manual, visual, sales, evidence, or unapproved dev-history specs must not enter public functional E2E'
 )
+assert.match(
+  readFileSync(resolve(root, 'playwright.config.ts'), 'utf8'),
+  /testIgnore:\s*isProduction\s*\?\s*\/\.\*\\\.dev\\\.spec\\\.ts\//,
+  'production E2E must exclude only the explicit .dev adapter contract'
+)
+assert.match(
+  readFileSync(resolve(root, 'playwright.config.ts'), 'utf8'),
+  /inko-build-production/,
+  'production E2E must use an isolated build directory'
+)
+assert.match(
+  readFileSync(resolve(root, 'playwright.accessibility.config.ts'), 'utf8'),
+  /inko-build-accessibility/,
+  'accessibility E2E must not overwrite the functional production build'
+)
+const standaloneHistorySpec = readFileSync(
+  resolve(root, 'tests/e2e/standalone-local-history.dev.spec.ts'),
+  'utf8'
+)
+assert.match(standaloneHistorySpec, /공개 SDK의 영속 저장 계약이 아니다/)
+assert.match(standaloneHistorySpec, /호스트 애플리케이션이 구현하고 운영한다/)
+
+for (const workflow of ['.github/workflows/ci.yml', '.github/workflows/release.yml']) {
+  const workflowSource = readFileSync(resolve(root, workflow), 'utf8')
+  assert.match(
+    workflowSource,
+    /npm run test:e2e:production/,
+    `${workflow} must hard-gate the production build/preview E2E suite`
+  )
+  assert.match(workflowSource, /npm run test:a11y/, `${workflow} must hard-gate accessibility`)
+  assert.match(
+    workflowSource,
+    /playwright install --with-deps chromium firefox webkit/,
+    `${workflow} must install all accessibility-gate browsers`
+  )
+}
 
 const scannerPath = 'scripts/release/verify-public-tree.mjs'
 const skippedPrefixes = [
@@ -178,7 +274,7 @@ const sensitivePatterns = [
   ['private deployment system', /\bSVN\b/i],
   ['internal commercial term', /commercial license/i],
   ['unapproved license state', /UNLICENSED/],
-  ['internal release wording', /internal release candidate/i],
+  ['internal release wording', /internal (?:pre-)?release(?: candidate)?/i],
   ['legacy parent wrapper', /PdfViewerPOP/],
   ['private Android bridge reference', /(?:androidBridge|PdfViewerActivity|window\.conn\b|window\.loadPdf(?:Base64)?\b)/],
   ['legacy user field', /\b(?:odcId|odcName|USER_NM|USER_ID|REG_DT|CANVAS_ID|ATCH_FILE_NO|CANVAS_JSON)\b/],

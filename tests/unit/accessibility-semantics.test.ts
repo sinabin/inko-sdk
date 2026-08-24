@@ -51,8 +51,6 @@ describe('접근성 시맨틱 기준선', () => {
       currentPage: 2,
       totalPages: 5,
       scale: 1.25,
-      brushColor: '#000000',
-      brushWidth: 2,
       hasUserCanvasData: true,
       isHistoryPanelVisible: true,
       showThumbnails: true
@@ -132,7 +130,7 @@ describe('접근성 시맨틱 기준선', () => {
     expect(dialog.getAttribute('aria-labelledby')).toBe('text-input-dialog-title')
     expect(textarea.labels?.[0]?.textContent).toBe('추가할 텍스트')
     expect(document.activeElement).toBe(textarea)
-    expect(el.querySelector('[aria-pressed="true"]')?.getAttribute('aria-label')).toBe('글자 크기 16px')
+    expect(el.querySelector<HTMLInputElement>('input[type="radio"]:checked')?.getAttribute('aria-label')).toBe('글자 크기 16px')
 
     const confirm = el.querySelector<HTMLButtonElement>('.confirm-btn')!
     confirm.focus()

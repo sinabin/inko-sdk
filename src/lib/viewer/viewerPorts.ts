@@ -1,4 +1,5 @@
 import type { CanvasDataRecord } from '../canvas/canvasDataCodec'
+import type { PdfSearchMatch } from '../pdf/pdfSearch.svelte'
 
 /** 명시적인 자원 해제 계약 */
 export interface DisposablePort {
@@ -38,10 +39,35 @@ export interface PdfDimensionDocumentPort {
   getPage(pageNumber: number): Promise<PdfDimensionPagePort>
 }
 
+/** PdfViewer가 스크롤 뷰어에 의존하는 기존 imperative 계약 */
+export interface PdfScrollViewerPort {
+  ensurePageRendered(pageNumber: number): Promise<void>
+  getCanvasData(pageNumber: number): string | null
+  getAllCanvasData(): Map<number, string>
+  setCanvasData(pageNumber: number, pageJson: string): void
+  clearCanvas(pageNumber?: number): void
+  waitUntilFirstPageReady(): Promise<void>
+  loadHistoryCanvasData(pageDataRecord: CanvasDataRecord): void
+  addTextToCurrentPage(text: string, x: number, y: number): void
+  confirmTextOnCurrentPage(text: string): void
+  cancelTextOnCurrentPage(): void
+  deleteSelected(): void
+  getCurrentPage(): number
+  undo(): boolean
+  redo(): boolean
+  getCanUndo(): boolean
+  getCanRedo(): boolean
+  scrollToPage(pageNumber: number, behavior?: ScrollBehavior): void
+  focusPage(pageNumber: number, options?: FocusOptions): boolean
+  scrollToSearchMatch(match: PdfSearchMatch, behavior?: ScrollBehavior): Promise<boolean>
+  getScrollContainer(): HTMLElement | null
+}
+
 /** 페이지 manager registry와 문서 편집 상태 저장소 사이의 내부 계약 */
 export interface DocumentCanvasStorePort extends DisposablePort {
   readonly isDisposed: boolean
   get(pageNumber: number): string | null
+  getCommittedSnapshot(pageNumber: number): string | null
   getAll(): Map<number, string>
   serialize(): string
   set(pageNumber: number, pageJson: string): void

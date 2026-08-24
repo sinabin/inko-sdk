@@ -26,6 +26,7 @@
  *
  *   viewer.save();                 // 캔버스 저장 요청 → onSave 콜백
  *   const pdf = await viewer.exportPdf(); // AcroForm 값이 반영된 PDF ArrayBuffer
+ *   const flattened = await viewer.exportFlattenedPdf(); // Paper 편집 레이어까지 구운 PDF + 완전성 report
  *   viewer.loadPdfUrl(url, name);  // 다른 PDF로 교체
  *   viewer.loadUserCanvasOverlay(list); // isCurrent 없으면 복수 검토 레이어, 있으면 단일 선택 버전 이력
  *   viewer.clear();
@@ -51,6 +52,7 @@
     LOAD_USER_CANVAS:    'loadUserCanvasData',
     SAVE_CANVAS:         'saveCanvas',
     EXPORT_PDF:          'exportPdf',
+    EXPORT_FLATTENED_PDF:'exportFlattenedPdf',
     CLEAR_CANVAS:        'clearCurrentCanvas',
     APPLY_CONFIG:        'applyConfig',
     // iframe → SDK (수신)
@@ -59,6 +61,7 @@
     CANVAS_CHANGED:      'canvasDataChanged',
     SAVE_RESPONSE:       'saveCanvasResponse',
     EXPORT_PDF_RESPONSE: 'exportPdfResponse',
+    EXPORT_FLATTENED_PDF_RESPONSE: 'exportFlattenedPdfResponse',
     CLOSE_VIEWER:        'closeViewer',
     SET_ORIENTATION:     'setOrientation',
   });
@@ -128,6 +131,7 @@
     var pendingQueue = [];   // viewerReady 이전에 들어온 요청
     var lastCanvasData = ''; // 가장 최근 변경된 canvasData (onChange 캐시)
     var pendingExports = Object.create(null);
+    var pendingFlattenedExports = Object.create(null);
     var exportSequence = 0;
     var EXPORT_TIMEOUT_MS = 60000;
 
@@ -139,15 +143,53 @@
       return 'inko-export-' + Date.now().toString(36) + '-' + exportSequence.toString(36);
     }
 
-    function rejectPendingExports(error) {
-      var ids = Object.keys(pendingExports);
+    function rejectPendingStore(store, error) {
+      var ids = Object.keys(store);
       for (var i = 0; i < ids.length; i++) {
-        var pending = pendingExports[ids[i]];
+        var pending = store[ids[i]];
         if (!pending) continue;
         clearTimeout(pending.timer);
         pending.reject(error);
-        delete pendingExports[ids[i]];
+        delete store[ids[i]];
       }
+    }
+
+    function rejectPendingExports(error) {
+      rejectPendingStore(pendingExports, error);
+      rejectPendingStore(pendingFlattenedExports, error);
+    }
+
+    function isFlattenReport(report) {
+      if (!report || typeof report !== 'object' || Array.isArray(report)) return false;
+      var numberFields = [
+        'totalPdfPages', 'requestedPages', 'flattenedPages', 'sourceItems',
+        'flattenedItems', 'skippedItems', 'failedItems', 'warnings', 'omittedIssues'
+      ];
+      for (var i = 0; i < numberFields.length; i++) {
+        var value = report[numberFields[i]];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return false;
+      }
+      return typeof report.hasFailures === 'boolean' &&
+        typeof report.rewroteDocument === 'boolean' &&
+        typeof report.issuesTruncated === 'boolean' &&
+        Array.isArray(report.pages) && report.pages.length <= 100000 &&
+        Array.isArray(report.issues) && report.issues.length <= 1000;
+    }
+
+    function requestExport(messageType, store, label) {
+      if (destroyed) {
+        return Promise.reject(new Error('[Inko SDK] viewer has been destroyed'));
+      }
+      var requestId = nextExportRequestId();
+      return new Promise(function (resolve, reject) {
+        var timer = setTimeout(function () {
+          if (!store[requestId]) return;
+          delete store[requestId];
+          reject(new Error('[Inko SDK] ' + label + ' timed out'));
+        }, EXPORT_TIMEOUT_MS);
+        store[requestId] = { resolve: resolve, reject: reject, timer: timer };
+        send(messageType, { requestId: requestId });
+      });
     }
 
     // ========== iframe 생성 ==========
@@ -257,6 +299,23 @@
           pending.resolve(data.pdfBytes);
           break;
 
+        case MSG.EXPORT_FLATTENED_PDF_RESPONSE:
+          var flattenedRequestId = data.requestId;
+          if (typeof flattenedRequestId !== 'string' || !pendingFlattenedExports[flattenedRequestId]) return;
+          var pendingFlattened = pendingFlattenedExports[flattenedRequestId];
+          clearTimeout(pendingFlattened.timer);
+          delete pendingFlattenedExports[flattenedRequestId];
+          if (!data.success) {
+            pendingFlattened.reject(new Error(data.message || '[Inko SDK] flattened PDF export failed'));
+            return;
+          }
+          if (!(data.pdfBytes instanceof ArrayBuffer) || !isFlattenReport(data.report)) {
+            pendingFlattened.reject(new TypeError('[Inko SDK] flattened export response is invalid'));
+            return;
+          }
+          pendingFlattened.resolve({ pdfBytes: data.pdfBytes, report: data.report });
+          break;
+
         case MSG.CLOSE_VIEWER:
           try { onClose(); } catch (e) { onError(e); }
           break;
@@ -323,19 +382,21 @@
        * @returns {Promise<ArrayBuffer>}
        */
       exportPdf: function () {
-        if (destroyed) {
-          return Promise.reject(new Error('[Inko SDK] viewer has been destroyed'));
-        }
-        var requestId = nextExportRequestId();
-        return new Promise(function (resolve, reject) {
-          var timer = setTimeout(function () {
-            if (!pendingExports[requestId]) return;
-            delete pendingExports[requestId];
-            reject(new Error('[Inko SDK] exportPdf timed out'));
-          }, EXPORT_TIMEOUT_MS);
-          pendingExports[requestId] = { resolve: resolve, reject: reject, timer: timer };
-          send(MSG.EXPORT_PDF, { requestId: requestId });
-        });
+        return requestExport(MSG.EXPORT_PDF, pendingExports, 'exportPdf');
+      },
+
+      /**
+       * AcroForm 값과 지원되는 Inko Paper 편집 유형을 PDF 페이지 content에 평탄화한다.
+       * 미지원·실패 항목은 report에 기록되며, report.hasFailures가 true면 호스트가 결과를 검수해야 한다.
+       * 평탄화 PDF에는 editable canvasData가 포함되지 않으며 기존 암호학적 서명은 보존되지 않을 수 있다.
+       * @returns {Promise<{pdfBytes:ArrayBuffer, report:object}>}
+       */
+      exportFlattenedPdf: function () {
+        return requestExport(
+          MSG.EXPORT_FLATTENED_PDF,
+          pendingFlattenedExports,
+          'exportFlattenedPdf'
+        );
       },
 
       /**
@@ -365,7 +426,7 @@
           iframe.parentNode.removeChild(iframe);
         }
         pendingQueue = [];
-        rejectPendingExports(new Error('[Inko SDK] viewer was destroyed before exportPdf completed'));
+        rejectPendingExports(new Error('[Inko SDK] viewer was destroyed before PDF export completed'));
       },
 
       /** 준비 여부 */
@@ -379,6 +440,6 @@
     mount: mount,
     /** 디버깅·고급 사용 — 메시지 타입 상수 노출 */
     MESSAGE_TYPES: MSG,
-    version: '1.1.0',
+    version: '1.2.0',
   };
 });

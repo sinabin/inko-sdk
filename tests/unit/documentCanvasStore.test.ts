@@ -122,6 +122,16 @@ describe('documentCanvasStore — 문서 편집 상태 단일 정본', () => {
     expect(store.getAll()).toEqual(new Map([[1, page('requested')]]))
   })
 
+  it('replace 중 live import 실패를 호출자에게 전파하고 요청 스냅샷은 보존', () => {
+    const store = createDocumentCanvasStore()
+    const manager = createManager(page('before'), false)
+    store.attachLivePage(1, manager)
+
+    expect(() => store.replace({ '1': page('requested') }))
+      .toThrow('Failed to restore canvas data for pages: 1')
+    expect(store.get(1)).toBe(page('requested'))
+  })
+
   it('Phase 1 codec으로 Map 입력과 페이지 키·Paper JSON 유효성을 동일하게 검증', () => {
     const store = createDocumentCanvasStore()
     store.replace(new Map([[2, page('two')]]))

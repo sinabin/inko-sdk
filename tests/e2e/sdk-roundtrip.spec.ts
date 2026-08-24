@@ -37,6 +37,13 @@ function pagesWithPaintingFromCanvasData(canvasData: string): string[] {
   }).map(([k]) => k)
 }
 
+/** 페이지별 Paper.js JSON을 구조 값으로 비교해 객체 존재뿐 아니라 기하·스타일 왕복을 검증 */
+function pageCanvasState(canvasData: string, pageNum: number): unknown {
+  const parsed = JSON.parse(canvasData) as Record<string, string>
+  const state = parsed[String(pageNum)]
+  return typeof state === 'string' ? JSON.parse(state) : null
+}
+
 test.describe('SDK Round-Trip', () => {
   test('펜 그리기 → 저장 → 재로드 시 캔버스 복원', async ({ page }) => {
     page.on('pageerror', e => console.log('[pageerror]', e.message))
@@ -90,6 +97,8 @@ test.describe('SDK Round-Trip', () => {
     // 5. canvasData 형식·내용 검증
     const pagesWithPainting = pagesWithPaintingFromCanvasData(savedCanvasData)
     expect(pagesWithPainting.length, '저장된 canvasData에 그림이 있는 페이지가 1개 이상 있어야 함').toBeGreaterThan(0)
+    const savedPageOne = pageCanvasState(savedCanvasData, 1)
+    expect(savedPageOne, '1페이지 Paper.js 상태가 구조화된 JSON이어야 함').not.toBeNull()
 
     // 6. clear()로 캔버스 비우고 검증 — 정말 비워지는지 + 자동저장 데이터가 실제로 손실되는지
     await page.evaluate(() => {
@@ -133,7 +142,8 @@ test.describe('SDK Round-Trip', () => {
 
     const pagesAfterRestore = pagesWithPaintingFromCanvasData(restoredCanvasData)
     expect(pagesAfterRestore.sort(), '재로드 후 두 페이지 상태가 모두 복원').toEqual(['1', '2'])
-    // clear 직후 0이었던 페이지가 reload+canvasData로 ≥1로 회복됨 → SDK URL+canvasData 인자가 실제 작동함을 입증
+    expect(pageCanvasState(restoredCanvasData, 1), '1페이지 기하·스타일이 정확히 왕복').toEqual(savedPageOne)
+    expect(pageCanvasState(restoredCanvasData, 2), '복제한 2페이지 기하·스타일도 정확히 왕복').toEqual(savedPageOne)
 
     // 공개 clear()는 현재 페이지(1)만 비우고 다른 페이지 상태는 보존
     await page.evaluate(() => {
@@ -146,6 +156,7 @@ test.describe('SDK Round-Trip', () => {
     )).not.toBe(restoredCanvasData)
     const afterCurrentPageClear = await page.evaluate(() => (window as any).__inkoDemo.savedState as string)
     expect(pagesWithPaintingFromCanvasData(afterCurrentPageClear)).toEqual(['2'])
+    expect(pageCanvasState(afterCurrentPageClear, 2), '현재 페이지 clear 뒤에도 다른 페이지 상태는 무손실').toEqual(savedPageOne)
 
     console.log(
       '[SDK Round-Trip] saved=%d → cleared=%d → restored=%d | pages painting before=%j cleared=%j after=%j',

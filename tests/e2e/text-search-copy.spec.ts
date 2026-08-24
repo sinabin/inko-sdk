@@ -37,15 +37,26 @@ test.describe('PDF text selection, copy, and document-wide search', () => {
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toContain('INKO_COPY_TOKEN_001')
 
+    // 검색이 자동 선택한 contentSelect는 닫을 때 기존 도구로 돌아가야 한다.
+    await frame.locator('[data-tool="pen"]').click()
     await page.keyboard.press('Control+F')
     const searchInput = frame.getByTestId('pdf-search-input')
     await expect(searchInput).toBeFocused()
+    await expect(frame.locator('[data-tool="contentSelect"]')).toHaveClass(/active/)
     await searchInput.fill('INKO_SEARCH_TARGET_008')
     await searchInput.press('Enter')
 
     await expect(frame.getByTestId('pdf-search-count')).toHaveText('1 / 1')
-    await expect(frame.locator('[data-page="8"] .textLayer .highlight.selected')).toHaveCount(1)
+    const selectedHighlight = frame.locator('[data-page="8"] .textLayer .highlight.selected')
+    await expect(selectedHighlight).toHaveCount(1)
     await expect(frame.locator('[data-page="8"]')).toBeInViewport()
+    await expect.poll(async () => selectedHighlight.evaluate((element) => {
+      const viewer = document.querySelector<HTMLElement>('.scroll-viewer')!
+      const viewerRect = viewer.getBoundingClientRect()
+      const highlightRect = element.getBoundingClientRect()
+      const expected = Math.max(16, (viewer.clientHeight - highlightRect.height) / 3)
+      return Math.abs(highlightRect.top - viewerRect.top - expected)
+    })).toBeLessThan(80)
 
     // 가상화로 page 8 DOM이 제거된 뒤 단일 결과 next가 wrap되면 다시 렌더·강조되어야 한다.
     await frame.locator('[data-page="1"]').scrollIntoViewIfNeeded()
@@ -55,6 +66,18 @@ test.describe('PDF text selection, copy, and document-wide search', () => {
     await expect(frame.locator('[data-page="8"]')).toBeInViewport()
 
     await searchInput.fill('INKO_TOKEN_THAT_DOES_NOT_EXIST')
+    await expect(frame.getByTestId('pdf-search-count')).toHaveText(/검색 결과 없음|No search results/)
+
+    await searchInput.fill('INKO_SEARCH_TARGET_008')
+    await expect(frame.locator('[data-page="8"] .textLayer .highlight.selected')).toHaveCount(1)
+    await searchInput.press('Escape')
+    await expect(frame.getByTestId('pdf-search-input')).toHaveCount(0)
+    await expect(frame.locator('[data-page="8"] [data-inko-search-highlight]')).toHaveCount(0)
+    await expect(frame.locator('[data-tool="pen"]')).toHaveClass(/active/)
+
+    // 닫기에서 질의까지 비워 재오픈이 직전 검색을 암묵적으로 재사용하지 않음
+    await page.keyboard.press('Control+F')
+    await expect(frame.getByTestId('pdf-search-input')).toHaveValue('')
     await expect(frame.getByTestId('pdf-search-count')).toHaveText('0 / 0')
   })
 })

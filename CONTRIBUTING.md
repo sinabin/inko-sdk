@@ -17,6 +17,78 @@ timing remain at the maintainers' discretion; no response time is promised.
   right to contribute it under the applicable open source license. Identify the
   source, version, license, and required notices for every new third-party item.
 
+## Architecture and state ownership
+
+Read [the architecture guide](docs/architecture.md) before changing viewer
+state or lifecycle code. A state value or disposable resource should have one
+owner; other layers receive getters, commands, callbacks, or narrow ports.
+
+| State or resource | Owner | Contribution rule |
+| --- | --- | --- |
+| PDF document, load generation, native `annotationStorage` | `pdfLoader` | Do not duplicate document identity or native-form state in components. |
+| Zoom, fit-width, pointer/keyboard listeners | `viewerInteractionController` | Attach and detach listeners through the controller lifecycle. |
+| Review entries, current editable version, history-panel mode | `viewerReviewController` | Keep host version metadata separate from editable page state. |
+| Host transport and message-driven document load | `viewerBridgeController` | Validate at the bridge boundary and suppress stale async completions. |
+| Visibility, render queue/FSM/cache, PDF.js render tasks | `scrollMode` | Cancel owned tasks and reject completions from an old lifecycle generation. |
+| Canonical page-keyed Paper JSON for the current document | `documentCanvasStore` | Update through store operations; do not assemble competing component-local maps. |
+| Live page managers and Paper scopes | `PageCanvasRegistry` | Snapshot before detach and dispose exactly once. |
+| TextLayer, AnnotationLayer, StructTree DOM | `PdfPageDomLayers` | Build from the matching page, logical viewport, and annotation canvas map. |
+| Persistent storage, identity, authorization, versions, backups | Host application | Do not move host responsibilities into the SDK. |
+
+Any async operation that can outlive its document, page, component, or DOM node
+must capture a generation or identity token and re-check it before mutating
+state, cache, DOM, or invoking an external callback. Add a test in which
+cancellation is requested but the underlying promise still resolves late.
+
+## Public and internal APIs
+
+An `export` keyword in the source tree does not by itself make an API public.
+The root workspace is private; only the curated `release/` package is published.
+
+| Surface | Status | Required treatment |
+| --- | --- | --- |
+| `sdk/inko-sdk.js`, `sdk/inko-sdk.d.ts`, `window.Inko` | Public | Preserve documented runtime and type behavior or make an explicit semver decision. |
+| `Inko.mount()`, `ViewerOptions`, `ViewerInstance`, callbacks | Public | Update JS, declarations, README/integration docs, and consumer tests together. |
+| `canvasData`, review-entry semantics, SDK↔viewer message schema | Compatibility-sensitive | Keep runtime validation and both sides of the bridge synchronized; test round trips. |
+| `viewer/index.html` self-hosted entry | Public deployment entry | Keep the entry loadable; hashed asset names are implementation details. |
+| `src/components/**`, `src/lib/**`, controllers, ports, Svelte props | Internal | Refactor freely only with behavior and lifecycle regression coverage. |
+| `src/lib/index.ts` exports | Internal source convenience | Do not document them as package imports unless they are deliberately added to the release package. |
+
+Public API additions should be small and justified by a host integration need.
+They require runtime implementation, matching declarations, documentation,
+installed-package verification, and a compatibility review. Internal types
+must not leak into the public declaration file accidentally.
+
+## Change-to-test matrix
+
+Run the narrowest relevant tests while iterating, then run the complete required
+checks before submitting. The rows below are minimum coverage, not substitutes
+for tests specific to a regression.
+
+| Changed area | Minimum focused verification |
+| --- | --- |
+| Browser SDK, public declarations, bridge or message payloads | `pdfvSdk.lifecycle`, `postMessageBridge`, and `viewerBridgeController` unit tests; `sdk-roundtrip` and `cross-origin-bridge` E2E; `npm run build:pkg`; `npm run test:release-install` |
+| `canvasData`, document store, page manager/registry, history | Relevant store/registry/coordinator unit tests; `page-revisit` and `sdk-roundtrip` E2E |
+| Page/component lifecycle, timers, listeners, async generations | A destroy/document-replace race test plus the nearest component/controller unit suite |
+| PDF.js render, TextLayer, AnnotationLayer, links, forms, search | Matching PDF adapter unit tests; `text-search-copy`, `native-annotations-forms`, or `bookmarks` E2E as applicable |
+| Scroll, visibility, render cache, zoom or high-DPI behavior | Scroll/cache/interaction unit tests; `zoom-interactions` E2E; `npm run test:perf` for performance-sensitive changes |
+| Toolbar, panels, keyboard, accessibility, locale or theme | Component/policy/accessibility unit tests; `accessibility`, `apply-config`, and relevant visual checks |
+| Dependencies, bundled assets, sample fixtures or release scripts | `npm run test:oss-boundary`; `npm run build`; `npm run build:pkg`; release-package and installed-tarball verification |
+
+The full pre-submission baseline is:
+
+```bash
+npm run check
+npm run test:coverage
+npm run build
+npm run test:e2e
+```
+
+Also run `npm run test:perf` when render, virtualization, cache, zoom, worker, or
+asset-loading behavior changes. Use `npm run test:visual` and the review
+checklist for intentional UI changes; do not accept a new screenshot merely
+because it differs.
+
 ## License and Developer Certificate of Origin
 
 Inko is licensed under the Apache License 2.0. By intentionally submitting a

@@ -21,15 +21,18 @@ function assertPageNumber(pageNumber: number): void {
 }
 
 /** 페이지별 Paper manager의 등록·스냅샷·해제를 단일 소유자로 관리 */
-export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
+export function createPageCanvasRegistry<TManager extends PageCanvasPort = PageCanvasPort>(
+  options: PageCanvasRegistryOptions
+) {
   const { store, onLifecycleError } = options
-  const managers = new Map<number, PageCanvasPort>()
-  const releasingManagers = new Set<PageCanvasPort>()
+  const managers = new Map<number, TManager>()
+  const releasingManagers = new Set<TManager>()
   let disposed = false
   const unsubscribeLiveDisconnect = store.isDisposed
     ? () => {}
     : store.subscribeLiveDisconnect((pageNumber, manager) => {
-      discard(pageNumber, manager)
+      const current = managers.get(pageNumber)
+      if (current === manager) discard(pageNumber, current)
     })
 
   function report(
@@ -44,7 +47,7 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
     }
   }
 
-  function safeDispose(pageNumber: number, manager: PageCanvasPort): void {
+  function safeDispose(pageNumber: number, manager: TManager): void {
     try {
       manager.dispose()
     } catch (error) {
@@ -52,7 +55,7 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
     }
   }
 
-  function safeDetach(pageNumber: number, manager: PageCanvasPort): void {
+  function safeDetach(pageNumber: number, manager: TManager): void {
     if (store.isDisposed) return
     try {
       store.detachLivePage(pageNumber, manager)
@@ -62,14 +65,14 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
   }
 
   /** 저장소가 동기화 실패로 권위를 끊은 manager를 stale snapshot 없이 폐기 */
-  function discard(pageNumber: number, manager: PageCanvasPort): void {
+  function discard(pageNumber: number, manager: TManager): void {
     if (managers.get(pageNumber) !== manager || releasingManagers.has(manager)) return
     managers.delete(pageNumber)
     safeDetach(pageNumber, manager)
     safeDispose(pageNumber, manager)
   }
 
-  function release(pageNumber: number, manager: PageCanvasPort): void {
+  function release(pageNumber: number, manager: TManager): void {
     if (managers.get(pageNumber) !== manager || releasingManagers.has(manager)) return
     releasingManagers.add(manager)
 
@@ -92,7 +95,7 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
   }
 
   /** manager 등록. 반환 cleanup은 교체 후 호출되어도 새 manager에 영향을 주지 않음 */
-  function register(pageNumber: number, manager: PageCanvasPort): () => void {
+  function register(pageNumber: number, manager: TManager): () => void {
     assertPageNumber(pageNumber)
     if (disposed) {
       safeDispose(pageNumber, manager)
@@ -135,7 +138,7 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
   }
 
   /** 페이지 manager 조건부 해제. 같은 cleanup 반복 호출은 무해 */
-  function unregister(pageNumber: number, manager?: PageCanvasPort): boolean {
+  function unregister(pageNumber: number, manager?: TManager): boolean {
     assertPageNumber(pageNumber)
     const current = managers.get(pageNumber)
     if (!current || (manager && current !== manager)) return false
@@ -143,12 +146,12 @@ export function createPageCanvasRegistry(options: PageCanvasRegistryOptions) {
     return true
   }
 
-  function get(pageNumber: number): PageCanvasPort | null {
+  function get(pageNumber: number): TManager | null {
     assertPageNumber(pageNumber)
     return managers.get(pageNumber) ?? null
   }
 
-  function getAll(): Map<number, PageCanvasPort> {
+  function getAll(): Map<number, TManager> {
     return new Map(managers)
   }
 

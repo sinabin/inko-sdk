@@ -1,6 +1,6 @@
 {
   "name": "inko-pdf-sdk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -25,12 +25,16 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "test:e2e:production": "playwright test --config playwright.production.config.ts",
+    "test:a11y": "playwright test --config playwright.accessibility.config.ts",
     "test:e2e:ui": "playwright test --ui",
+    "test:visual": "playwright test --config playwright.visual.config.ts",
     "test:perf": "playwright test --config playwright.perf.config.ts",
     "test:release-package": "node scripts/release/verify-release-package.mjs release",
     "test:release-install": "node tests/release/verify-installed-tarball.mjs --expect-public"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "^1.62.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@tsconfig/svelte": "^5.0.8",
@@ -46,8 +50,9 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
-    "paper": "^0.12.18",
-    "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^5.4.624"
+    "paper": "0.12.18",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "5.4.624",
+    "pretendard": "1.3.9"
   }
 }

@@ -1,5 +1,5 @@
 /** Playwright E2E 헬퍼 — 뷰어 준비, 포인터 시뮬레이션, 시각 캡처 */
-import type { Page, Locator } from '@playwright/test'
+import type { Page, Locator, FrameLocator } from '@playwright/test'
 import { expect } from '@playwright/test'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -19,6 +19,37 @@ export async function waitForFirstPageRender(page: Page) {
     null,
     { timeout: 30_000 }
   )
+}
+
+/**
+ * Public SDK host가 자신의 저장소에서 읽은 검토본을 주입한 상태를 만든다.
+ * 개발용 localStorage adapter에 의존하지 않으므로 production bundle에서도
+ * 호스트의 저장·버전 책임 경계를 그대로 유지한다.
+ */
+export async function openSdkHostWithReviewHistory(page: Page): Promise<FrameLocator> {
+  await page.goto('sdk/example.html')
+  const frame = page.frameLocator('#viewer iframe')
+  await expect(frame.locator('.pdf-viewer-container')).toBeVisible({ timeout: 15_000 })
+  await expect(frame.locator('.scroll-page-container canvas.scroll-page-canvas-pdf').first())
+    .toBeVisible({ timeout: 30_000 })
+
+  const canvasData = JSON.stringify({
+    '1': JSON.stringify(['Layer', { children: [] }])
+  })
+  await page.evaluate((saved) => {
+    ;(window as any).__inkoDemo.viewer.loadUserCanvasOverlay([{
+      canvasId: 'host-review-v1',
+      userName: '호스트 검토자 (v1)',
+      userId: 'host-reviewer',
+      canvasData: saved,
+      enabled: true,
+      color: '',
+      registeredAt: '2026-08-24T10:00:00+09:00',
+      isCurrent: true
+    }])
+  }, canvasData)
+  await expect(frame.locator('.history-btn')).toBeVisible({ timeout: 10_000 })
+  return frame
 }
 
 /**

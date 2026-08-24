@@ -275,7 +275,7 @@ async function verifyBrowserRoundTrip(installedRoot) {
   )
   assert(childPadding > parentPadding, 'nested bookmark row lost its hierarchy indentation')
 
-  await frame.getByRole('button', { name: /Integration checklist/ }).click()
+  await frame.getByRole('treeitem', { name: /Integration checklist/ }).click()
   await page.waitForFunction(() => {
     const viewerFrame = document.querySelector('#viewer iframe')
     return viewerFrame?.contentDocument?.querySelector('.page-input')?.value === '12'

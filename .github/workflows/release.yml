@@ -25,20 +25,21 @@ jobs:
   publish:
     if: github.repository == 'sinabin/inko-sdk'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     environment: release
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      INKO_PUBLIC_RELEASE: 'true'
 
     steps:
       - name: Check out the requested tag
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
       - name: Set up Node.js and npm registry
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22.14'
           registry-url: https://registry.npmjs.org
@@ -93,11 +94,25 @@ jobs:
           node scripts/release/hash-tree.mjs dist > dist-second.sha256
           diff -u dist-first.sha256 dist-second.sha256
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run browser E2E regression suite
+        env:
+          # 교차 origin 검증은 배포 전용 allowlist를 주입하므로 공개 산출물 빌드와 분리.
+          INKO_PUBLIC_RELEASE: 'false'
         run: npm run test:e2e
+
+      - name: Run production-build browser E2E regression suite
+        env:
+          # 교차 origin 시나리오용 allowlist를 주입한 최적화 build를 별도로 검증한다.
+          INKO_PUBLIC_RELEASE: 'false'
+        run: npm run test:e2e:production
+
+      - name: Run cross-browser accessibility gate
+        env:
+          INKO_PUBLIC_RELEASE: 'false'
+        run: npm run test:a11y
 
       - name: Run 120-page performance regression gate
         run: npm run test:perf
@@ -106,6 +121,7 @@ jobs:
         run: |
           npm run build:pkg
           node scripts/release/verify-release-package.mjs release
+          npm pack --dry-run --json ./release > npm-pack-dry-run.json
 
       - name: Locate the single release archive
         id: artifact
@@ -133,8 +149,13 @@ jobs:
           cmp "$SBOM" "$RUNNER_TEMP/sbom-second.cdx.json"
           sha256sum "$TARBALL" "$SBOM" > SHA256SUMS
 
-      - name: Attest package and SBOM
-        uses: actions/attest@v4
+      - name: Attest package build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: ${{ steps.artifact.outputs.tarball }}
+
+      - name: Attest package SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
         with:
           subject-path: ${{ steps.artifact.outputs.tarball }}
           sbom-path: ${{ steps.artifact.outputs.sbom }}
@@ -180,9 +201,9 @@ jobs:
 
       - name: Preserve release evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: inko-release-${{ env.RELEASE_TAG }}
+          name: inko-release-${{ env.RELEASE_TAG }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 90
           path: |
@@ -191,4 +212,12 @@ jobs:
             SHA256SUMS
             dist-first.sha256
             dist-second.sha256
+            npm-pack-dry-run.json
+            coverage/
             test-results/performance/
+            node_modules/.cache/inko-playwright-development/report/
+            node_modules/.cache/inko-playwright-development/results/
+            node_modules/.cache/inko-playwright-production/report/
+            node_modules/.cache/inko-playwright-production/results/
+            node_modules/.cache/inko-playwright-accessibility/report/
+            node_modules/.cache/inko-playwright-accessibility/results/

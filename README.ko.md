@@ -19,6 +19,8 @@ Inko는 [NextH](https://nexth.co.kr/)가 공개합니다. 구현과 기술적 �
 - 가상화된 전체 페이지를 대상으로 하는 PDF 원문 텍스트 선택·복사와 Unicode 리터럴 검색
 - PDF.js 네이티브 주석, 안전한 내부/외부 링크, AcroForm 표시·입력
 - 현재 AcroForm 값이 반영된 `ArrayBuffer`를 반환하는 `exportPdf()`
+- AcroForm과 지원되는 Inko 그림 유형을 페이지에 굽고 누락·실패를 항목별로
+  보고하는 `exportFlattenedPdf()`
 - 펜·형광펜·지우개·텍스트·도형·선택·줌·썸네일 도구
 - PDF에 내장된 목차를 읽어 보여주는 책갈피 패널 (목차가 있는 문서에서만 노출)
 - `canvasData`를 통한 편집 상태 반환과 복원
@@ -75,13 +77,26 @@ cp node_modules/inko-pdf-sdk/sdk/inko-sdk.js public/inko-sdk.js
 
   // 별도 바이너리 경로: 네이티브 AcroForm 값을 PDF 바이트에 기록합니다.
   const pdfBytes = await viewer.exportPdf()
+
+  // 전달본: AcroForm + 현재 Inko 그림 전체. canvasData 자체는 포함하지 않습니다.
+  const { pdfBytes: deliveryPdf, report } = await viewer.exportFlattenedPdf()
+  if (report.hasFailures) throw new Error('일부 주석을 PDF에 반영하지 못했습니다')
 </script>
 ```
 
-`canvasData`와 `exportPdf()`는 의도적으로 분리된 계약입니다. `canvasData`는
+`canvasData`·`exportPdf()`·`exportFlattenedPdf()`는 의도적으로 분리된 계약입니다. `canvasData`는
 Inko의 Paper.js 그림·검토 상태를 편집 가능한 형태로 보존하고,
 `exportPdf()`는 PDF.js `saveDocument()`가 만든 네이티브 AcroForm 포함 PDF
-바이트를 반환합니다. Inko 그림을 PDF에 flatten하거나 합성하지 않습니다.
+바이트를 반환하며 Inko 그림은 합성하지 않습니다. `exportFlattenedPdf()`는 그
+AcroForm 저장본을 기준으로 모든 페이지의 펜·형광펜·텍스트·사각형·원·선을 PDF
+콘텐츠에 굽습니다. 결과는 다른 PDF 뷰어에서도 보이지만 다시 편집할 `canvasData`를
+포함하지 않으므로 이어서 편집하려면 호스트가 `canvasData`도 계속 저장해야 합니다.
+`report.hasFailures`를 반드시 확인하세요. 콘텐츠 재작성은 기존 CMS/PAdES
+암호학적 서명을 보존하지 못합니다. Helvetica로 표현 가능한 PointText는 PDF
+텍스트로 유지됩니다. 한글 등 그 밖의 Unicode PointText는 OFL Pretendard로
+고해상도 투명 이미지에 그려지고 `TEXT_RASTERIZED` 경고로 보고되므로, 이
+fallback 텍스트는 선택 가능한 PDF 텍스트가 아닌 시각 콘텐츠입니다.
+Pretendard는 실제 fallback이 필요할 때만 지연 로드됩니다.
 
 cross-origin iframe으로 배포하려면 빌드 시 `VITE_ALLOWED_ORIGINS`를
 설정하고 호스트 환경에 필요한 CSP·CORS HTTP 헤더를 적용해야 합니다.
@@ -132,10 +147,11 @@ sha256sum --check SHA256SUMS
 npm audit signatures
 ```
 
-GitHub build attestation은 다음과 같이 검증할 수 있습니다.
+릴리스 workflow는 같은 tarball에 대해 SLSA build provenance와 CycloneDX SBOM
+attestation을 각각 생성합니다. 서명과 저장소 identity는 다음과 같이 검증합니다.
 
 ```bash
-gh attestation verify inko-pdf-sdk-1.1.0.tgz --repo sinabin/inko-sdk
+gh attestation verify inko-pdf-sdk-1.2.0.tgz --repo sinabin/inko-sdk
 ```
 
 ## 문서

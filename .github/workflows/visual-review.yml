@@ -1,0 +1,79 @@
+name: Visual Review Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      review_reason:
+        description: Reason for generating a new visual review packet
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inko-visual-review-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22.14'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate review captures
+        run: npm run test:visual
+
+      - name: Record capture context and review instructions
+        if: always()
+        shell: bash
+        env:
+          REVIEW_REASON: ${{ inputs.review_reason }}
+        run: |
+          mkdir -p test-results/visual
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "runner_image=ubuntu-24.04"
+            echo "review_reason=$REVIEW_REASON"
+            node --version
+            npm --version
+            npx playwright --version
+          } > test-results/visual/capture-context.txt
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Human visual review required
+
+          A green job means that deterministic Linux Chromium captures were generated.
+          It is not an automated aesthetic approval. Download the visual-review artifact,
+          complete `REVIEW_CHECKLIST.md`, and attach the decision to the release review record.
+          EOF
+
+      - name: Upload visual review packet
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: inko-visual-review-${{ github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            test-results/visual/captures/
+            test-results/visual/capture-context.txt
+            test-results/visual/report/
+            test-results/visual/results/
+            tests/visual/REVIEW_CHECKLIST.md

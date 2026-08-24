@@ -13,8 +13,11 @@
     "index.html",
     "package-lock.json",
     "package.json",
+    "playwright.accessibility.config.ts",
     "playwright.config.ts",
+    "playwright.production.config.ts",
     "playwright.perf.config.ts",
+    "playwright.visual.config.ts",
     "svelte.config.js",
     "tsconfig.app.json",
     "tsconfig.json",
@@ -29,7 +32,8 @@
     "src/",
     "tests/e2e/",
     "tests/release/",
-    "tests/unit/"
+    "tests/unit/",
+    "tests/visual/"
   ],
   "additionalFiles": [
     "docs/architecture.md",

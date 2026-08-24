@@ -22,6 +22,9 @@
   let queue = $state<number[]>([])
   let isProcessing = $state(false)
   let totalPages = $state(0)
+  let rovingPage = $state(1)
+  let thumbnailStatusAnnouncement = $state('')
+  let wasQueueing = false
   let activeThumbnailEl: HTMLElement | null = null
 
   // 활성 썸네일 요소 추적용 Svelte action
@@ -35,6 +38,19 @@
   }
 
   let queueLength = $derived(queue.length)
+  let tabStopPage = $derived(
+    renderedPages.includes(rovingPage) ? rovingPage : (renderedPages[0] ?? currentPage)
+  )
+
+  $effect(() => {
+    const isQueueing = queueLength > 0
+    if (isQueueing && !wasQueueing) {
+      thumbnailStatusAnnouncement = t('thumbnails.loadingStarted')
+    } else if (!isQueueing && wasQueueing) {
+      thumbnailStatusAnnouncement = t('thumbnails.loadingComplete', { total: totalPages })
+    }
+    wasQueueing = isQueueing
+  })
 
   // PDF 문서가 변경되면 큐 초기화 및 썸네일 생성 시작
   $effect(() => {
@@ -88,6 +104,7 @@
   $effect(() => {
     // currentPage 변경 시 반응성 트리거
     const _page = currentPage
+    rovingPage = _page
     tick().then(() => {
       if (activeThumbnailEl) {
         const reduceMotion = typeof window !== 'undefined'
@@ -101,7 +118,40 @@
   })
 
   function handlePageClick(pageNumber: number) {
+    rovingPage = pageNumber
     onPageChange?.(pageNumber)
+  }
+
+  /** 세로 목록 roving tabindex 패턴 — 화살표는 포커스, Enter/Space는 기본 버튼 활성화 */
+  function handleListKeydown(event: KeyboardEvent): void {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLButtonElement>('button[data-page-number]')
+      : null
+    if (!target) return
+
+    const list = target.closest('.thumbnail-list')
+    const buttons = Array.from(
+      list?.querySelectorAll<HTMLButtonElement>('button[data-page-number]') ?? []
+    )
+    const currentIndex = buttons.indexOf(target)
+    if (currentIndex < 0 || buttons.length === 0) return
+
+    let nextIndex: number | null = null
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = Math.min(currentIndex + 1, buttons.length - 1)
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = Math.max(currentIndex - 1, 0)
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = buttons.length - 1
+    }
+
+    if (nextIndex === null) return
+    event.preventDefault()
+    const nextButton = buttons[nextIndex]
+    rovingPage = Number(nextButton.dataset.pageNumber)
+    nextButton.focus()
   }
 </script>
 
@@ -121,23 +171,33 @@
           {fileName}
         </div>
       {/if}
-      <ol class="thumbnail-list" aria-label={t('thumbnails.listLabel')}>
+      <ol
+        class="thumbnail-list"
+        role="list"
+        aria-label={t('thumbnails.listLabel')}
+        aria-busy={queueLength > 0}
+      >
         {#each renderedPages as pageNum (pageNum)}
           <li use:activeRef={pageNum === currentPage}>
             <PdfThumbnail
               pdfDocument={pdfDocument}
               pageNumber={pageNum}
               isActive={pageNum === currentPage}
+              tabIndex={pageNum === tabStopPage ? 0 : -1}
               onPageClick={handlePageClick}
+              onKeydown={handleListKeydown}
             />
           </li>
         {/each}
         {#if queueLength > 0}
-          <li class="loading-info" role="status" aria-live="polite" aria-atomic="true">
+          <li class="loading-info">
             {t('thumbnails.loadingList', { n: renderedPages.length, total: totalPages })}
           </li>
         {/if}
       </ol>
+      <p class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {thumbnailStatusAnnouncement}
+      </p>
     </div>
   {/if}
 </nav>
@@ -210,6 +270,18 @@
     padding: var(--space-2) 0;
   }
 
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   /* 스크롤바 스타일 */
   .thumbnail-sidebar::-webkit-scrollbar {
     width: 8px;
@@ -220,7 +292,7 @@
   }
 
   .thumbnail-sidebar::-webkit-scrollbar-thumb {
-    background: var(--color-border-divider);
+    background: var(--color-text-secondary);
     border-radius: var(--radius-sm);
   }
 

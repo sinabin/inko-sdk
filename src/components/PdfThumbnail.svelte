@@ -7,14 +7,18 @@
     pdfDocument: PDFDocumentProxy
     pageNumber: number
     isActive: boolean
+    tabIndex?: number
     onPageClick?: (pageNumber: number) => void
+    onKeydown?: (event: KeyboardEvent) => void
   }
 
   let {
     pdfDocument,
     pageNumber,
     isActive,
-    onPageClick
+    tabIndex = 0,
+    onPageClick,
+    onKeydown
   }: Props = $props()
 
   let canvasEl: HTMLCanvasElement | undefined = $state()
@@ -33,51 +37,93 @@
 
   let isMounted = true
   let renderTask: RenderTask | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let renderGeneration = 0
   const MAX_RETRIES = 2
   const RETRY_DELAY = 500
 
-  async function renderThumbnail(retryCount = 0) {
-    if (!canvasEl || !isMounted) return
-
-    // 기존 렌더링 취소 (경합 방지)
-    if (renderTask) {
-      renderTask.cancel()
-      renderTask = null
+  function clearRetryTimer(): void {
+    if (retryTimer) {
+      clearTimeout(retryTimer)
+      retryTimer = null
     }
+  }
+
+  function cancelActiveRender(): void {
+    const task = renderTask
+    renderTask = null
+    task?.cancel()
+  }
+
+  function isCurrentRender(
+    generation: number,
+    document: PDFDocumentProxy,
+    targetPage: number,
+    canvas: HTMLCanvasElement
+  ): boolean {
+    return isMounted &&
+      generation === renderGeneration &&
+      pdfDocument === document &&
+      pageNumber === targetPage &&
+      canvasEl === canvas
+  }
+
+  function startRender(document: PDFDocumentProxy, targetPage: number, canvas: HTMLCanvasElement): void {
+    const generation = ++renderGeneration
+    clearRetryTimer()
+    cancelActiveRender()
+    void renderThumbnail(document, targetPage, canvas, generation)
+  }
+
+  async function renderThumbnail(
+    document: PDFDocumentProxy,
+    targetPage: number,
+    canvas: HTMLCanvasElement,
+    generation: number,
+    retryCount = 0
+  ): Promise<void> {
+    if (!isCurrentRender(generation, document, targetPage, canvas)) return
+
+    let currentTask: RenderTask | null = null
 
     try {
       isLoading = true
       error = false
       errorDetail = ''
 
-      const page = await pdfDocument.getPage(pageNumber)
-      if (!isMounted || !canvasEl) return
+      const page = await document.getPage(targetPage)
+      if (!isCurrentRender(generation, document, targetPage, canvas)) return
 
       const scale = 0.25 // 썸네일 스케일 (25%)
       const viewport = page.getViewport({ scale })
 
-      const context = canvasEl.getContext('2d')
+      const context = canvas.getContext('2d')
       if (!context) {
         throw new Error(t('thumbnail.contextError'))
       }
 
       // 캔버스 크기 설정 (정수로 반올림, scrollMode와 일관)
-      canvasEl.width = Math.floor(viewport.width)
-      canvasEl.height = Math.floor(viewport.height)
+      canvas.width = Math.floor(viewport.width)
+      canvas.height = Math.floor(viewport.height)
 
       // 렌더링 시작 (canvas 명시적 전달 — pdf.js v5+)
-      renderTask = page.render({
+      currentTask = page.render({
         canvasContext: context,
         viewport,
-        canvas: canvasEl
+        canvas
       } as any)
+      renderTask = currentTask
 
-      await renderTask.promise
+      await currentTask.promise
+      if (renderTask === currentTask) renderTask = null
 
-      if (isMounted) {
+      if (isCurrentRender(generation, document, targetPage, canvas)) {
         isLoading = false
       }
     } catch (err: any) {
+      if (renderTask === currentTask) renderTask = null
+      if (!isCurrentRender(generation, document, targetPage, canvas)) return
+
       if (err?.name === 'RenderingCancelledException') {
         return
       }
@@ -85,15 +131,19 @@
       // pdf.js 동시 렌더링 충돌 — 메인 뷰어/프리뷰와 페이지 렌더가 겹칠 때 발생, 조용히 재시도
       const isConcurrentRender = err?.message?.includes('multiple render()')
       if (!isConcurrentRender) {
-        console.error(`[Thumbnail] Page ${pageNumber} render failed (attempt ${retryCount + 1}):`, err)
+        console.error(`[Thumbnail] Page ${targetPage} render failed (attempt ${retryCount + 1}):`, err)
       }
 
       // 재시도 (최대 MAX_RETRIES회, RETRY_DELAY ms 간격)
-      if (retryCount < MAX_RETRIES && isMounted) {
-        setTimeout(() => {
-          if (isMounted) renderThumbnail(retryCount + 1)
+      if (retryCount < MAX_RETRIES) {
+        clearRetryTimer()
+        retryTimer = setTimeout(() => {
+          retryTimer = null
+          if (isCurrentRender(generation, document, targetPage, canvas)) {
+            void renderThumbnail(document, targetPage, canvas, generation, retryCount + 1)
+          }
         }, isConcurrentRender ? RETRY_DELAY * 2 : RETRY_DELAY)
-      } else if (isMounted) {
+      } else {
         error = true
         errorDetail = err?.message || String(err)
         isLoading = false
@@ -104,16 +154,25 @@
   // PDF 문서 및 캔버스 준비 시 렌더링
   // untrack: renderThumbnail 내부의 reactive 읽기/쓰기가 이 effect의 의존성으로 추적되지 않도록 방지
   $effect(() => {
-    if (pdfDocument && canvasEl) {
-      untrack(() => renderThumbnail())
+    const document = pdfDocument
+    const targetPage = pageNumber
+    const canvas = canvasEl
+    if (!document || !canvas) return
+
+    untrack(() => startRender(document, targetPage, canvas))
+
+    return () => {
+      renderGeneration++
+      clearRetryTimer()
+      cancelActiveRender()
     }
   })
 
   onDestroy(() => {
     isMounted = false
-    if (renderTask) {
-      renderTask.cancel()
-    }
+    renderGeneration++
+    clearRetryTimer()
+    cancelActiveRender()
   })
 </script>
 
@@ -122,9 +181,12 @@
   class="thumbnail-container"
   class:active={isActive}
   onclick={() => onPageClick?.(pageNumber)}
+  onkeydown={onKeydown}
   aria-label={accessibilityLabel}
   aria-current={isActive ? 'page' : undefined}
   aria-busy={isLoading}
+  data-page-number={pageNumber}
+  tabindex={tabIndex}
 >
   <span class="thumbnail-content" aria-hidden="true">
     {#if isLoading}
@@ -211,7 +273,8 @@
 
   .error-text {
     font-size: var(--font-size-xs);
-    color: var(--color-error);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
     padding: var(--space-1);
     word-break: break-all;
     text-align: center;

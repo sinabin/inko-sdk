@@ -65,6 +65,13 @@ debounce하는 것이 좋습니다. `save()`는 저장소에 직접 쓰지 않�
 `ArrayBuffer`로 돌려주면 해당 Promise만 완료합니다. Paper.js 편집 상태는 이
 응답에 포함되지 않습니다.
 
+`viewer.exportFlattenedPdf()`는 별도 request ID로 현재 문서의 live PaperScope와
+화면 밖 페이지 snapshot을 하나의 `canvasData`로 고정한 다음, 먼저
+`saveDocument()`로 AcroForm 상태를 반영하고 그 바이트에 각 편집 객체를 PDF
+content로 기록합니다. `exportFlattenedPdfResponse`는 transferable `ArrayBuffer`와
+항목별 `report`를 함께 반환합니다. 이 전달본에는 다시 편집할 `canvasData`가
+포함되지 않으며, host 저장소 책임도 바뀌지 않습니다.
+
 ## 저장 상태 복원
 
 ```mermaid
@@ -145,6 +152,7 @@ sequenceDiagram
 | SDK → 뷰어 | `loadUserCanvasData` | 검토본 레이어 목록 로드 |
 | SDK → 뷰어 | `saveCanvas` | 현재 문서 상태 요청 |
 | SDK → 뷰어 | `exportPdf` | request ID 기반 네이티브 PDF 바이트 요청 |
+| SDK → 뷰어 | `exportFlattenedPdf` | request ID 기반 Paper 편집 레이어 평탄화 요청 |
 | SDK → 뷰어 | `clearCurrentCanvas` | 현재 페이지 편집 상태 초기화 |
 | SDK → 뷰어 | `applyConfig` | 테마·도구·언어 부분 갱신 |
 | 뷰어 → SDK | `viewerReady` | 연결 준비 완료 |
@@ -152,6 +160,7 @@ sequenceDiagram
 | 뷰어 → SDK | `canvasDataChanged` | 편집 상태 변경 |
 | 뷰어 → SDK | `saveCanvasResponse` | 저장 요청 결과 |
 | 뷰어 → SDK | `exportPdfResponse` | 같은 request ID의 PDF `ArrayBuffer` 결과 |
+| 뷰어 → SDK | `exportFlattenedPdfResponse` | 같은 request ID의 PDF `ArrayBuffer`와 완전성 report |
 | 뷰어 → SDK | `closeViewer` | 닫기 요청 |
 | 뷰어 → SDK | `setOrientation` | 방향 변경 요청 |
 

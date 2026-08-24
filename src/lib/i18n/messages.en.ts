@@ -37,6 +37,16 @@ export const en: Record<string, string> = {
   'toolbar.history': 'History',
   'toolbar.save': 'Save',
 
+  // Document search
+  'search.region': 'PDF search',
+  'search.input': 'Find in document',
+  'search.placeholder': 'Enter search text',
+  'search.previous': 'Previous search result',
+  'search.next': 'Next search result',
+  'search.close': 'Close search',
+  'search.indexing': 'Preparing document search',
+  'search.noResults': 'No search results',
+
   // Bookmark (embedded PDF outline) panel
   'bookmark.title': 'Bookmarks',
   'bookmark.loading': 'Loading outline...',
@@ -49,6 +59,8 @@ export const en: Record<string, string> = {
   'bookmark.expand': 'Expand {title}',
   'bookmark.collapse': 'Collapse {title}',
   'bookmark.close': 'Close bookmark panel',
+  'bookmark.listLabel': 'PDF bookmark outline',
+  'bookmark.keyboardInstructions': 'Use Up and Down Arrow to move between items, and Left and Right Arrow to collapse or expand child items.',
 
   // History panel
   'history.title': 'History',
@@ -58,9 +70,12 @@ export const en: Record<string, string> = {
   'history.hideUser': 'Hide {name}',
   'history.showUser': 'Show {name}',
   'history.close': 'Close history',
-  'history.layerVisibility': 'Show {name} layer',
+  'history.layerVisibility': '{name} layer',
   'history.currentVersion': 'Currently editing',
   'history.continueEditLabel': 'Continue editing the {date} version by {name}',
+  'history.versionPosition': '{current} of {total}',
+  'history.versionSelection': '{name}, {date}, {position}',
+  'history.versionSelectionCurrent': '{name}, {date}, {position}, {current}',
 
   // Common
   'common.cancel': 'Cancel',
@@ -92,6 +107,33 @@ export const en: Record<string, string> = {
   'text.instructions': 'Press Enter to confirm, Shift+Enter for a new line, or Escape to cancel.',
   'text.fontSizeGroup': 'Font size',
   'text.fontSizeOption': 'Font size {size}px',
+  'text.requiredError': 'Enter the text to add.',
+
+  // PDF page accessibility
+  'document.viewerRegion': 'PDF document viewport',
+  'document.pageRegion': 'PDF page {n}',
+  'document.pageText': 'Text on page {n}',
+  'document.currentPageAnnouncement': 'Current PDF page {n} of {total}',
+  'document.accessibleTextLoading': 'Preparing text for page {n}.',
+  'document.accessibleTextImageOnly': 'Page {n} has no readable text and may contain only images.',
+  'document.accessibleTextError': 'Text on page {n} could not be read.',
+  'document.canvasCountAnnouncement': 'PDF page {n} has {count} editable annotations.',
+  'document.canvasSelectionAnnouncement': 'PDF page {n}, selected {kind} {index} of {total}, at x {x}, y {y}.',
+  'document.canvasInstructionsSelect': 'Press Enter to cycle through editable annotations or Shift+Enter to cycle backward. Use an Arrow key to move by 1 pixel or Shift+Arrow to move by 10 pixels. Press Delete or Backspace to delete, and Escape to clear the selection.',
+  'document.canvasInstructionsText': 'Press Enter to open text input at the center of the page.',
+  'document.canvasInstructionsShape': 'Press Enter to create a default-size shape at the center of the page.',
+  'document.canvasInstructionsPath': 'Freehand pen and highlighter input requires its essential drawn path, so keyboard creation does not apply. Keyboard users can use the shape or text tools.',
+  'document.canvasInstructionsEraser': 'To delete with the keyboard, switch to the Select tool, select an annotation, and press Delete or Backspace.',
+  'document.canvasInstructionsDefault': 'PDF page editable annotation canvas.',
+  'document.annotationKind.text': 'text',
+  'document.annotationKind.drawing': 'drawing',
+  'document.annotationKind.group': 'group',
+  'document.annotationKind.image': 'image',
+  'document.annotationKind.annotation': 'annotation',
+  'document.pageAnnotations': 'PDF forms and annotations on page {n}',
+  'document.annotationControl': 'PDF control {index} on page {n}',
+  'document.editableCanvas': 'Editable annotations on page {n}',
+  'document.reviewCanvas': 'Review annotation layer on page {n}',
 
   // Toast categories
   'error.categoryParse': 'Data',
@@ -115,6 +157,8 @@ export const en: Record<string, string> = {
   'thumbnails.listLabel': 'Page list',
   'thumbnails.noPdf': 'No PDF loaded',
   'thumbnails.loadingList': 'Loading thumbnails... ({n}/{total})',
+  'thumbnails.loadingStarted': 'Loading page thumbnails.',
+  'thumbnails.loadingComplete': 'Loaded all {total} page thumbnails.',
   'thumbnail.loading': 'Loading...',
   'thumbnail.error': 'Error',
   'thumbnail.pageLabel': 'Page {n}',

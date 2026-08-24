@@ -283,4 +283,31 @@ describe('shapeTools', () => {
     expect(noCanvas.isActive).toBe(true)
     noCanvas.deactivate()
   })
+
+  it.each(['rectangle', 'circle', 'line'] as const)('%s는 canvas Enter로 중앙 기본 도형을 생성하고 Tab은 보존한다', (shapeType) => {
+    const { scope, canvas } = scopeFixture()
+    const onShapeCreated = vi.fn()
+    const tools = createShapeTools({
+      getScope: () => scope,
+      getBrush: () => ({ color: '#123456', width: 2 }),
+      onShapeCreated
+    })
+    tools.activate(shapeType)
+    canvas.focus()
+    const enter = new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true
+    })
+    canvas.dispatchEvent(enter)
+
+    expect(enter.defaultPrevented).toBe(true)
+    expect(onShapeCreated).toHaveBeenCalledTimes(1)
+    const created = onShapeCreated.mock.calls[0][0] as paper.Item
+    expect(created.position.x).toBeCloseTo(scope.view.center.x)
+    expect(created.position.y).toBeCloseTo(scope.view.center.y)
+    expect(created.bounds.width).toBeGreaterThanOrEqual(40)
+
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    canvas.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
+  })
 })

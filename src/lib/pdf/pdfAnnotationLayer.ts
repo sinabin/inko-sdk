@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import type { PageViewport } from 'pdfjs-dist'
 import type { PdfLinkService } from './pdfLinkService'
+import type { PdfStructTreeLayerBuilder } from './pdfStructTreeLayer'
 
 type PdfJsViewerModule = typeof import('pdfjs-dist/web/pdf_viewer.mjs')
 
@@ -35,6 +36,8 @@ export interface PdfAnnotationLayerRenderOptions {
   readOnly: boolean
   /** page.render에 전달한 것과 동일한 Map */
   annotationCanvasMap?: Map<string, HTMLCanvasElement>
+  /** text layer와 공유하는 tagged-PDF structure tree */
+  structTreeLayer?: PdfStructTreeLayerBuilder
 }
 
 function normalizeImageResourcesPath(path?: string): string {
@@ -61,7 +64,8 @@ export function createPdfAnnotationLayer(options: PdfAnnotationLayerOptions) {
     pdfPage,
     viewport,
     readOnly,
-    annotationCanvasMap
+    annotationCanvasMap,
+    structTreeLayer
   }: PdfAnnotationLayerRenderOptions): Promise<HTMLDivElement | null> {
     if (disposed) return null
 
@@ -97,7 +101,7 @@ export function createPdfAnnotationLayer(options: PdfAnnotationLayerOptions) {
 
     builder = nextBuilder
     try {
-      await nextBuilder.render({ viewport, intent: 'display' })
+      await nextBuilder.render({ viewport, intent: 'display', structTreeLayer })
     } catch (error) {
       if (disposed || renderGeneration !== generation || builder !== nextBuilder) {
         nextBuilder.cancel()

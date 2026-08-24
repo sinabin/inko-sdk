@@ -25,6 +25,7 @@
   let inputText = $state('')
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let dialogEl = $state<HTMLDialogElement | null>(null)
+  let showValidationError = $state(false)
   let returnFocusElement: HTMLElement | null = null
   // IME(한글·일본어 등) 조합 진행 중 추적 — 합성 중 Enter는 문자 선택용이지 confirm 아님
   let isComposing = false
@@ -34,6 +35,7 @@
     if (!isVisible || !dialogEl) return
 
     inputText = initialText
+    showValidationError = false
     if (typeof document !== 'undefined') {
       const active = document.activeElement
       returnFocusElement = active instanceof HTMLElement && active !== document.body ? active : null
@@ -49,6 +51,11 @@
   })
 
   function handleConfirm() {
+    if (!inputText.trim()) {
+      showValidationError = true
+      textareaEl?.focus()
+      return
+    }
     closeDialog()
     onConfirm?.(inputText)
     restoreFocus()
@@ -92,6 +99,7 @@
   }
 
   function handleDialogKeyDown(event: KeyboardEvent): void {
+    if (isComposing || event.isComposing || event.keyCode === 229) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -133,6 +141,12 @@
     isComposing = false
   }
 
+  function handleInput(event: Event): void {
+    if (showValidationError && (event.currentTarget as HTMLTextAreaElement).value.trim()) {
+      showValidationError = false
+    }
+  }
+
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {
       handleCancel()
@@ -160,27 +174,43 @@
         id="text-input-overlay-field"
         bind:this={textareaEl}
         bind:value={inputText}
+        oninput={handleInput}
         onkeydown={handleKeyDown}
         oncompositionstart={handleCompositionStart}
         oncompositionend={handleCompositionEnd}
         placeholder={t('text.placeholder')}
+        required
+        aria-required="true"
+        aria-invalid={showValidationError}
+        aria-describedby={showValidationError
+          ? 'text-input-dialog-instructions text-input-validation-error'
+          : 'text-input-dialog-instructions'}
         rows="3"
         class="text-input"
         style="font-size: {Math.min(fontSize, 32)}px"
       ></textarea>
+      {#if showValidationError}
+        <p id="text-input-validation-error" class="validation-error" role="alert">
+          {t('text.requiredError')}
+        </p>
+      {/if}
       <fieldset class="font-size-row">
         <legend class="font-size-label">{t('text.fontSizeGroup')}</legend>
         {#each fontSizePresets as size}
-          <button
-            type="button"
+          <label
             class="font-size-chip"
             class:active={fontSize === size}
-            onclick={() => onFontSizeChange?.(size)}
-            aria-label={t('text.fontSizeOption', { size })}
-            aria-pressed={fontSize === size}
           >
-            {size}
-          </button>
+            <input
+              type="radio"
+              name="text-input-font-size"
+              value={size}
+              checked={fontSize === size}
+              aria-label={t('text.fontSizeOption', { size })}
+              onchange={() => onFontSizeChange?.(size)}
+            />
+            <span aria-hidden="true">{size}</span>
+          </label>
         {/each}
       </fieldset>
       <div class="button-row">
@@ -263,6 +293,13 @@
     box-shadow: var(--shadow-focus-soft);
   }
 
+  .validation-error {
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+  }
+
   .font-size-row {
     display: flex;
     align-items: center;
@@ -280,13 +317,18 @@
   }
 
   .font-size-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: var(--space-1) var(--space-2_5);
     border: 1px solid #d9d9d9;
     border-radius: var(--radius-lg);
     background: var(--color-surface);
     cursor: pointer;
     font-size: var(--font-size-sm);
-    min-height: 32px;
+    min-height: 44px;
+    min-width: 44px;
     transition: all var(--motion-fast) var(--ease-out);
   }
 
@@ -302,7 +344,17 @@
     color: var(--color-primary);
   }
 
-  .font-size-chip:focus-visible,
+  .font-size-chip input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .font-size-chip:has(input:focus-visible),
   .btn:focus-visible {
     outline: 3px solid var(--color-primary);
     outline-offset: 2px;

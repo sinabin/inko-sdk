@@ -3,7 +3,8 @@
   import { fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import type { UserCanvasInfo } from '../types'
-  import { t } from '../lib/i18n/index.svelte'
+  import { currentLocale, t } from '../lib/i18n/index.svelte'
+  import { motionDuration } from '../lib/accessibility/userPreferences'
 
   interface Props {
     userCanvasData: UserCanvasInfo[]
@@ -33,7 +34,15 @@
   let closeButtonElement = $state<HTMLButtonElement | null>(null)
   let returnFocusElement: HTMLElement | null = null
   let wasVisible = false
-  let selectedVersionIndex = $derived(userCanvasData.findIndex(data => data.enabled ?? false))
+  let selectedVersionIndex = $derived.by(() => {
+    const enabledIndex = userCanvasData.findIndex(data => data.enabled ?? false)
+    if (enabledIndex >= 0) return enabledIndex
+    const currentIndex = userCanvasData.findIndex(data => data.canvasId === currentEditCanvasId)
+    return currentIndex >= 0 ? currentIndex : (userCanvasData.length > 0 ? 0 : -1)
+  })
+  let selectedVersion = $derived(
+    selectedVersionIndex >= 0 ? (userCanvasData[selectedVersionIndex] ?? null) : null
+  )
 
   $effect(() => {
     if (isVisible && !wasVisible) {
@@ -64,13 +73,24 @@
       return dateStr  // 파싱 실패 시 원본 반환
     }
 
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    const locale = currentLocale()
+    try {
+      return date.toLocaleString(locale, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {
+      return date.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
   }
 
   /** 같은 작성자의 여러 버전도 보조기술에서 서로 구분할 수 있도록 시각 정보와 순번을 함께 제공. */
@@ -81,9 +101,12 @@
     }
 
     const date = formatDate(data.registeredAt)
-    const position = `${index + 1}/${userCanvasData.length}`
-    const current = isCurrent ? `, ${t('history.currentVersion')}` : ''
-    return date === '-' ? `${name}, ${position}${current}` : `${name}, ${date}, ${position}${current}`
+    const position = t('history.versionPosition', {
+      current: index + 1,
+      total: userCanvasData.length
+    })
+    const params = { name, date, position, current: t('history.currentVersion') }
+    return t(isCurrent ? 'history.versionSelectionCurrent' : 'history.versionSelection', params)
   }
 
   function getContinueEditLabel(data: UserCanvasInfo): string {
@@ -140,8 +163,8 @@
   }
 
   /** 이력을 편집 캔버스에 불러오기 — 카드 토글로 전파되지 않도록 stopPropagation */
-  function handleLoadHistory(canvasId: string, event: Event): void {
-    event.stopPropagation()
+  function handleLoadHistory(canvasId: string, event?: Event): void {
+    event?.stopPropagation()
     onLoadHistory?.(canvasId)
   }
 </script>
@@ -155,7 +178,7 @@
     role="region"
     aria-labelledby="user-canvas-history-title"
     tabindex="-1"
-    transition:fly={{ x: 24, duration: 320, easing: cubicOut, opacity: 0 }}
+    transition:fly={{ x: 24, duration: motionDuration(320), easing: cubicOut, opacity: 0 }}
   >
     <div class="list-header">
       <h3 id="user-canvas-history-title">{t('history.title')}</h3>
@@ -185,28 +208,28 @@
         {#each userCanvasData as data, index (data.canvasId)}
           {@const visible = data.enabled ?? false}
           {@const isCurrent = !!currentEditCanvasId && data.canvasId === currentEditCanvasId}
-          {@const showAsCurrent = isVersionHistoryMode && isCurrent && visible}
+          {@const selected = isVersionHistoryMode ? index === selectedVersionIndex : visible}
+          {@const showAsCurrent = isVersionHistoryMode && isCurrent && selected}
 
           <li
             class="list-item"
-            class:enabled={visible && !showAsCurrent}
+            class:enabled={selected && !showAsCurrent}
             class:current={showAsCurrent}
             role={isVersionHistoryMode ? 'none' : undefined}
           >
             <button
               type="button"
               class="item-select"
-              role={isVersionHistoryMode ? 'radio' : undefined}
+              role={isVersionHistoryMode ? 'radio' : 'checkbox'}
               tabindex={isVersionHistoryMode ? (index === (selectedVersionIndex >= 0 ? selectedVersionIndex : 0) ? 0 : -1) : 0}
-              aria-checked={isVersionHistoryMode ? visible : undefined}
-              aria-pressed={isVersionHistoryMode ? undefined : visible}
+              aria-checked={selected}
               aria-label={getSelectionLabel(data, index, isCurrent)}
               onclick={() => handleCardSelect(data.canvasId, visible)}
               onkeydown={(event) => handleVersionKeydown(event, index)}
             >
               <div class="item-header">
-                <span class="visibility-indicator" class:visible aria-hidden="true">
-                  {#if visible}
+                <span class="visibility-indicator" class:visible={selected} aria-hidden="true">
+                  {#if selected}
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="8" cy="8" r="6.5" fill="currentColor" stroke="none"/>
                       <polyline points="5 8.4 7.2 10.6 11 6.2" stroke="#fff"/>
@@ -232,7 +255,7 @@
               </div>
             </button>
 
-            {#if !isReadOnly && !isCurrent}
+            {#if !isVersionHistoryMode && !isReadOnly && !isCurrent}
               <div class="item-actions">
                 <button
                   type="button"
@@ -247,12 +270,26 @@
           </li>
         {/each}
       </ul>
+      {#if isVersionHistoryMode && !isReadOnly && selectedVersion && selectedVersion.canvasId !== currentEditCanvasId}
+        <div class="selected-version-actions">
+          <button
+            type="button"
+            class="load-btn"
+            onclick={() => handleLoadHistory(selectedVersion!.canvasId)}
+            aria-label={getContinueEditLabel(selectedVersion)}
+          >
+            {t('history.continueEdit')}
+          </button>
+        </div>
+      {/if}
     {/if}
   </div>
 {/if}
 
 <style>
   .user-canvas-data-list {
+    --history-scrim: rgba(255, 255, 255, 0.94);
+
     position: fixed;
     top: 80px;
     right: var(--space-5);
@@ -272,7 +309,9 @@
   /* Liquid Glass — 우측에 떠 있는 패널, blur는 PDF 컨텐츠를 살짝 비춰 위계 표현 */
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .user-canvas-data-list {
-      background: var(--glass-bg-strong);
+      background:
+        linear-gradient(var(--history-scrim), var(--history-scrim)),
+        var(--glass-bg-strong);
       border-color: var(--glass-border);
       backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
       -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -326,7 +365,7 @@
   .empty-state {
     padding: var(--space-6) var(--space-4);
     text-align: center;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
   }
 
   .empty-state p {
@@ -447,7 +486,7 @@
   }
 
   .created-date {
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-size: var(--font-size-xs);
   }
 
@@ -456,6 +495,14 @@
     padding-bottom: var(--space-3_5);
     display: flex;
     gap: var(--space-2);
+  }
+
+  .selected-version-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--color-border-light);
   }
 
   /* "이어서 편집" — 1차 액션: filled save */
@@ -489,6 +536,10 @@
   .item-select:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: -2px;
+  }
+
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: high) {
+    .user-canvas-data-list { --history-scrim: var(--color-surface); }
   }
 
 </style>

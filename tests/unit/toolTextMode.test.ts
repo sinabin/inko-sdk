@@ -206,4 +206,30 @@ describe('textMode', () => {
     expect(mode.pendingPosition).toBeNull()
     mode.cancelOperation()
   })
+
+  it('canvas Enter는 페이지 중앙에서 입력을 요청하고 Tab은 가로채지 않는다', () => {
+    const { scope, canvas } = scopeFixture()
+    const onRequestInput = vi.fn()
+    const mode = createTextMode({
+      getScope: () => scope,
+      getBrush: () => ({ color: '#000' }),
+      onRequestInput
+    })
+    mode.activate()
+    canvas.focus()
+    const enter = new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true
+    })
+    canvas.dispatchEvent(enter)
+
+    expect(enter.defaultPrevented).toBe(true)
+    expect(onRequestInput).toHaveBeenCalledWith()
+    expect(mode.pendingPosition?.x).toBeCloseTo(scope.view.center.x)
+    expect(mode.pendingPosition?.y).toBeCloseTo(scope.view.center.y)
+
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    canvas.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
+    mode.cancelText()
+  })
 })

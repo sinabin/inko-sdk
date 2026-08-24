@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { PdfSearchState } from '../lib/pdf/pdfSearch.svelte'
+  import { t } from '../lib/i18n/index.svelte'
 
   export interface PdfSearchLabels {
     region: string
@@ -24,17 +25,6 @@
     onClose?: () => void
   }
 
-  const DEFAULT_LABELS: PdfSearchLabels = {
-    region: 'PDF 검색',
-    input: '문서에서 찾기',
-    placeholder: '검색어 입력',
-    previous: '이전 검색 결과',
-    next: '다음 검색 결과',
-    close: '검색 닫기',
-    indexing: '문서 검색 준비 중',
-    noResults: '검색 결과 없음'
-  }
-
   let {
     open = false,
     query = '',
@@ -48,19 +38,40 @@
 
   let inputElement: HTMLInputElement | null = $state(null)
   let wasOpen = false
+  let isComposing = false
+  let returnFocusElement: HTMLElement | null = null
 
-  const labels = $derived({ ...DEFAULT_LABELS, ...labelOverrides })
+  const labels = $derived({
+    region: t('search.region'),
+    input: t('search.input'),
+    placeholder: t('search.placeholder'),
+    previous: t('search.previous'),
+    next: t('search.next'),
+    close: t('search.close'),
+    indexing: t('search.indexing'),
+    noResults: t('search.noResults'),
+    ...labelOverrides
+  })
   const currentNumber = $derived(searchState.currentIndex >= 0 ? searchState.currentIndex + 1 : 0)
   const hasMatches = $derived(searchState.totalMatches > 0)
   const isIndexing = $derived(searchState.status === 'indexing')
   const statusText = $derived(
     isIndexing
       ? labels.indexing
+      : searchState.query.length > 0 && !hasMatches
+        ? labels.noResults
       : `${currentNumber} / ${searchState.totalMatches}`
   )
 
   $effect(() => {
     if (open && !wasOpen) {
+      if (
+        typeof document !== 'undefined'
+        && document.activeElement instanceof HTMLElement
+        && document.activeElement !== document.body
+      ) {
+        returnFocusElement = document.activeElement
+      }
       void tick().then(() => {
         inputElement?.focus()
         inputElement?.select()
@@ -74,15 +85,29 @@
   }
 
   function handleKeyDown(event: KeyboardEvent): void {
+    if (isComposing || event.isComposing || event.keyCode === 229) return
     if (event.key === 'Escape') {
       event.preventDefault()
-      onClose?.()
+      event.stopPropagation()
+      handleClose()
       return
     }
     if (event.key !== 'Enter') return
     event.preventDefault()
     if (event.shiftKey) onPrevious?.()
     else onNext?.()
+  }
+
+  function handleClose(): void {
+    const previous = returnFocusElement
+    onClose?.()
+    setTimeout(() => {
+      const fallback = typeof document !== 'undefined'
+        ? document.querySelector<HTMLElement>('[data-testid="pdf-search-open"]')
+        : null
+      const target = previous?.isConnected ? previous : fallback
+      target?.focus()
+    }, 0)
   }
 </script>
 
@@ -105,13 +130,14 @@
       spellcheck="false"
       oninput={handleInput}
       onkeydown={handleKeyDown}
+      oncompositionstart={() => (isComposing = true)}
+      oncompositionend={() => (isComposing = false)}
     />
 
     <output
       id="inko-pdf-search-status"
       data-testid="pdf-search-count"
       class:no-results={searchState.query.length > 0 && !hasMatches && !isIndexing}
-      aria-label={searchState.query.length > 0 && !hasMatches && !isIndexing ? labels.noResults : undefined}
       aria-live="polite"
       aria-atomic="true"
     >{statusText}</output>
@@ -137,7 +163,7 @@
       class="close-button"
       aria-label={labels.close}
       title={labels.close}
-      onclick={onClose}
+      onclick={handleClose}
     ><span aria-hidden="true">&times;</span></button>
   </form>
 {/if}

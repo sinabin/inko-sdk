@@ -221,6 +221,92 @@ describe('scrollMode 성능 계약', () => {
     await flushMicrotasks()
   })
 
+  it('cancel 요청 뒤 늦게 완료된 render는 dispose된 cache·FSM·callback을 되살리지 않는다', async () => {
+    let resolveRender!: () => void
+    const task = {
+      promise: new Promise<void>((resolve) => { resolveRender = resolve }),
+      // pdf.js cancellation이 이미 완료 직전인 작업을 항상 reject한다는 전제에 기대지 않는다.
+      cancel: vi.fn()
+    }
+    const pdf = {
+      numPages: 1,
+      getPage: vi.fn(async () => ({
+        getViewport: () => ({ width: 612, height: 792 }),
+        render: () => task
+      }))
+    } as any
+    const onPageRendered = vi.fn()
+    const mode = createScrollMode({
+      getPdfDoc: () => pdf,
+      getTotalPages: () => 1,
+      getViewportScale: () => 1,
+      onPageRendered,
+      onPageUnrendered: () => {}
+    })
+
+    mode.requestRender(1)
+    await flushMicrotasks()
+    mode.dispose()
+    expect(task.cancel).toHaveBeenCalledTimes(1)
+
+    resolveRender()
+    await flushMicrotasks(16)
+
+    expect(onPageRendered).not.toHaveBeenCalled()
+    expect(mode.renderCache.size).toBe(0)
+    expect(mode.pageStateManager.pageStates.size).toBe(0)
+  })
+
+  it('dispose 후 재initialize해도 이전 세대 완료가 새 페이지 task·FSM을 침범하지 않는다', async () => {
+    const tasks: Array<{ promise: Promise<void>; resolve: () => void; cancel: ReturnType<typeof vi.fn> }> = []
+    const pdf = {
+      numPages: 1,
+      getPage: vi.fn(async () => ({
+        getViewport: () => ({ width: 612, height: 792 }),
+        render: () => {
+          let resolve!: () => void
+          const task = {
+            promise: new Promise<void>((done) => { resolve = done }),
+            resolve: () => resolve(),
+            cancel: vi.fn()
+          }
+          tasks.push(task)
+          return task
+        }
+      }))
+    } as any
+    const onPageRendered = vi.fn()
+    const mode = createScrollMode({
+      getPdfDoc: () => pdf,
+      getTotalPages: () => 1,
+      getViewportScale: () => 1,
+      onPageRendered,
+      onPageUnrendered: () => {}
+    })
+
+    mode.requestRender(1)
+    await flushMicrotasks()
+    mode.dispose()
+
+    mode.initialize(document.createElement('div'))
+    mode.requestRender(1)
+    await flushMicrotasks()
+    expect(tasks).toHaveLength(2)
+    expect(mode.pageStateManager.getState(1)).toBe('rendering')
+
+    tasks[0]!.resolve()
+    await flushMicrotasks(16)
+    expect(onPageRendered).not.toHaveBeenCalled()
+    expect(mode.renderCache.size).toBe(0)
+    expect(mode.pageStateManager.getState(1)).toBe('rendering')
+
+    tasks[1]!.resolve()
+    await flushMicrotasks(16)
+    expect(onPageRendered).toHaveBeenCalledTimes(1)
+    expect(mode.pageStateManager.getState(1)).toBe('rendered')
+    mode.dispose()
+  })
+
   it('초기 fit-width로 scale이 바뀌면 stale 결과를 폐기하고 최신 scale로 다시 렌더한다', async () => {
     const pdf = createDeferredPdf(1)
     const rendered: HTMLCanvasElement[] = []

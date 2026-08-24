@@ -1,8 +1,10 @@
 {
-  "version": "inko-perf-v1",
+  "version": "inko-perf-v2",
   "pages": 120,
-  "bytes": 453771,
-  "sha256": "920473dc9560669607b913ba6cac91ab351d861fb80044d0ee313518b195acee",
-  "pageSizePoints": [612, 792],
-  "workload": "uniform Helvetica text rows, vector rules and deterministic bars; no external assets"
+  "bytes": 830850,
+  "sha256": "5d0652f7a08ad31b47063c037cc852b4785bba72ac67bf36265cbd7bc2eb1836",
+  "pageSizeSignatures": ["595.28x841.89", "612x792", "720x720", "792x612"],
+  "rotations": [0, 90, 180, 270],
+  "syntheticImageVariants": 3,
+  "workload": "mixed page sizes and rotations, Helvetica/Courier text, vector rules, transparency and three deterministic generated RGB PNGs; no external assets"
 }

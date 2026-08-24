@@ -116,12 +116,12 @@ test.describe('공개 SDK 버전 이력과 복수 검토 레이어', () => {
     await expect(checked).toHaveCount(1)
 
     // 과거 버전에서 이어서 편집 → 패널 재오픈 후에도 그 버전 하나만 선택
-    await rows.nth(1).locator('.load-btn').click()
+    await panel.locator('.selected-version-actions .load-btn').click()
     await expect(panel).toBeHidden()
     await historyButton.click()
     await expect(checked).toHaveCount(1)
     await expect(rows.nth(1).locator('.visibility-indicator.visible')).toHaveCount(1)
-    await expect(rows.nth(1).locator('.load-btn')).toHaveCount(0)
+    await expect(panel.locator('.selected-version-actions')).toHaveCount(0)
   })
 
   test('isCurrent 없는 협업 모드: canonical 레이어 복수 선택과 독립 토글 유지', async ({ page }) => {
@@ -156,5 +156,33 @@ test.describe('공개 SDK 버전 이력과 복수 검토 레이어', () => {
     await expect(panel.locator('.list-item').nth(1)).toHaveClass(/enabled/)
     await panel.locator('.item-select').first().click()
     await expect(panel.locator('.list-item.enabled')).toHaveCount(2)
+  })
+
+  test('Paper.js가 거부한 이력은 성공 처리하지 않고 패널과 기존 편집 기준을 유지', async ({ page }) => {
+    await page.goto(EXAMPLE_URL)
+    const frame = page.frameLocator('#viewer iframe')
+    await waitForViewer(frame)
+
+    const latest = { ...seedItem('v2'), userName: '나 (v2)', isCurrent: true }
+    const invalid = {
+      ...seedItem('invalid'),
+      userName: '손상된 이력',
+      canvasData: JSON.stringify({ '1': '[0]' })
+    }
+    await loadEditingBaseline(page, latest.canvasData)
+    await sendOverlay(page, [latest, invalid])
+
+    const historyButton = frame.locator('[title="작업 이력"]')
+    await historyButton.click()
+    const panel = frame.locator('.user-canvas-data-list')
+    const radios = panel.getByRole('radio')
+    await radios.nth(1).click()
+    await panel.locator('.selected-version-actions .load-btn').click()
+
+    // 실제 Paper import가 실패하면 성공처럼 닫히거나 현재 편집 ID가 바뀌면 안 된다.
+    await expect(panel).toBeVisible()
+    await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'true')
+    await radios.nth(0).click()
+    await expect(panel.locator('.selected-version-actions')).toHaveCount(0)
   })
 })

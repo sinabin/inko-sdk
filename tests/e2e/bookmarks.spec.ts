@@ -1,6 +1,11 @@
 /** 책갈피(PDF 내장 목차) — 추출·트리 표시·페이지 이동 회귀 검증 */
 import { test, expect } from '@playwright/test'
-import { waitForViewerReady, waitForFirstPageRender, captureForClaude } from './helpers'
+import {
+  waitForViewerReady,
+  waitForFirstPageRender,
+  captureForClaude,
+  openSdkHostWithReviewHistory
+} from './helpers'
 
 /** 툴바의 책갈피 토글 — 목차가 있는 문서에서만 렌더된다 */
 const bookmarkToggle = '.outline-toggle-btn'
@@ -50,7 +55,7 @@ test.describe('책갈피 (PDF 내장 목차)', () => {
     await expect(page.locator(rows)).toHaveCount(13)
 
     await expect(page.locator(`${panel} .entry-title`).first()).toHaveText('Cover')
-    await expect(page.getByRole('button', { name: /Integration checklist/ })).toBeVisible()
+    await expect(page.getByRole('treeitem', { name: /Integration checklist/ })).toBeVisible()
 
     // 중첩 항목은 부모보다 깊은 들여쓰기를 가진다
     const parentPad = await page.locator(rows).nth(3).evaluate(
@@ -66,13 +71,14 @@ test.describe('책갈피 (PDF 내장 목차)', () => {
     await page.locator(bookmarkToggle).click()
     await expect(page.locator(rows)).toHaveCount(13)
 
-    const twisty = page.locator(`${rows} .twisty`).first()
-    await expect(twisty).toHaveAttribute('aria-expanded', 'true')
+    const parentEntry = page.locator(`${rows} .outline-entry[aria-expanded]`).first()
+    const twisty = parentEntry.locator('.twisty')
+    await expect(parentEntry).toHaveAttribute('aria-expanded', 'true')
 
     await twisty.click()
     // 하위 8개가 빠져 최상위 5개만 남는다
     await expect(page.locator(rows)).toHaveCount(5)
-    await expect(twisty).toHaveAttribute('aria-expanded', 'false')
+    await expect(parentEntry).toHaveAttribute('aria-expanded', 'false')
 
     await twisty.click()
     await expect(page.locator(rows)).toHaveCount(13)
@@ -86,7 +92,7 @@ test.describe('책갈피 (PDF 내장 목차)', () => {
     await expect(pageInput).toHaveValue('1')
 
     // 12페이지를 가리키는 마지막 최상위 항목
-    await page.getByRole('button', { name: /Integration checklist/ }).click()
+    await page.getByRole('treeitem', { name: /Integration checklist/ }).click()
 
     await expect(pageInput).toHaveValue('12', { timeout: 15_000 })
 
@@ -113,24 +119,22 @@ test.describe('책갈피 (PDF 내장 목차)', () => {
     // 1페이지에서는 첫 항목(Cover)이 활성
     await expect(page.locator(`${rows}.is-active .entry-title`)).toHaveText('Cover')
 
-    await page.getByRole('button', { name: /Specification table/ }).click()
+    await page.getByRole('treeitem', { name: /Specification table/ }).click()
     await expect(page.locator('.page-input')).toHaveValue('3', { timeout: 15_000 })
     await expect(page.locator(`${rows}.is-active .entry-title`)).toHaveText('Specification table')
   })
 
   test('책갈피 패널과 작업 이력 패널은 동시에 열리지 않는다', async ({ page }) => {
-    // 작업 이력 버튼은 이력이 있을 때만 노출된다 —
-    // standalone(dev·localhost) 모드에서 한 번 저장해 이력을 만든 뒤 검증한다
-    await page.locator('.save-btn').click()
-    const historyToggle = page.locator('.history-btn')
-    await expect(historyToggle).toBeVisible({ timeout: 10_000 })
+    // 검토본은 public SDK host가 주입한다. 저장소·버전 책임을 SDK에 전가하지 않는다.
+    const frame = await openSdkHostWithReviewHistory(page)
+    const historyToggle = frame.locator('.history-btn')
 
-    await page.locator(bookmarkToggle).click()
-    await expect(page.locator(panel)).toBeVisible()
+    await frame.locator(bookmarkToggle).click()
+    await expect(frame.locator(panel)).toBeVisible()
 
     await historyToggle.click()
-    await expect(page.locator('.user-canvas-data-list')).toBeVisible()
-    await expect(page.locator(panel)).toHaveCount(0)
+    await expect(frame.locator('.user-canvas-data-list')).toBeVisible()
+    await expect(frame.locator(panel)).toHaveCount(0)
   })
 
   test('닫기 버튼으로 패널을 닫는다', async ({ page }) => {

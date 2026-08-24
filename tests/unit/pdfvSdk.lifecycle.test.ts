@@ -70,7 +70,7 @@ describe('공개 iframe SDK 수명주기', () => {
       onReady
     })
 
-    expect(sdk.version).toBe('1.1.0')
+    expect(sdk.version).toBe('1.2.0')
     expect(order).toEqual(['listener', 'navigation', 'append'])
     expect(onReady).toHaveBeenCalledTimes(1)
     expect(viewer.isReady()).toBe(true)
@@ -130,6 +130,56 @@ describe('공개 iframe SDK 수명주기', () => {
     viewer.destroy()
   })
 
+  it('exportFlattenedPdf 응답은 bytes와 bounded 완전성 report를 함께 반환한다', async () => {
+    const sdk = loadSdk()
+    const viewer = sdk.mount('#viewer', { src: '/viewer/index.html' })
+    const iframeWindow = viewer.iframe.contentWindow as Window
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'viewerReady' },
+      origin: window.location.origin,
+      source: iframeWindow
+    }))
+
+    const postSpy = vi.spyOn(iframeWindow, 'postMessage')
+    const exported = viewer.exportFlattenedPdf()
+    const request = postSpy.mock.calls
+      .map(([message]) => message as any)
+      .find((message) => message?.type === 'exportFlattenedPdf')
+    expect(request?.data?.requestId).toMatch(/^inko-export-/)
+
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer
+    const report = {
+      totalPdfPages: 1,
+      requestedPages: 1,
+      flattenedPages: 1,
+      sourceItems: 1,
+      flattenedItems: 1,
+      skippedItems: 0,
+      failedItems: 0,
+      warnings: 0,
+      omittedIssues: 0,
+      hasFailures: false,
+      rewroteDocument: true,
+      issuesTruncated: false,
+      pages: [],
+      issues: []
+    }
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        type: 'exportFlattenedPdfResponse',
+        requestId: request.data.requestId,
+        success: true,
+        pdfBytes: bytes,
+        report
+      },
+      origin: window.location.origin,
+      source: iframeWindow
+    }))
+
+    await expect(exported).resolves.toEqual({ pdfBytes: bytes, report })
+    viewer.destroy()
+  })
+
   it('destroy가 미결 exportPdf를 명시적으로 reject한다', async () => {
     const sdk = loadSdk()
     const viewer = sdk.mount('#viewer', { src: '/viewer/index.html' })
@@ -142,6 +192,6 @@ describe('공개 iframe SDK 수명주기', () => {
 
     const exported = viewer.exportPdf()
     viewer.destroy()
-    await expect(exported).rejects.toThrow(/destroyed before exportPdf completed/)
+    await expect(exported).rejects.toThrow(/destroyed before PDF export completed/)
   })
 })

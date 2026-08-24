@@ -33,7 +33,7 @@ function rootCssVar(frame: FrameLocator, name: string) {
   return frame.locator('html').evaluate((el, varName) => (el as HTMLElement).style.getPropertyValue(varName), name)
 }
 
-/** enabled 설정이 필터링하는 편집 툴바 도구 (PDF 내용 선택은 별도 네이티브 도구) */
+/** enabled 설정이 필터링하는 편집 툴바 도구 */
 function authoringTools(frame: FrameLocator) {
   return frame.locator('.tool-btn[data-tool]')
 }
@@ -61,10 +61,16 @@ test.describe('applyConfig 커스터마이징 (SDK 경유)', () => {
 
     // 테마 — primitive 오버라이드로 semantic 토큰까지 리브랜드
     await expect.poll(() => rootCssVar(iframe, '--color-primary')).toBe('#e8a045')
-    // 도구 필터 — 편집 툴바에는 pen만 남고, PDF 네이티브 내용 선택은 유지
+    // 도구 필터 — 편집 툴바와 별도 네이티브 내용 선택 모두 enabled 계약을 따름
     await expect(authoringTools(iframe)).toHaveCount(1)
     await expect(iframe.locator('[data-tool="pen"]')).toBeVisible()
-    await expect(iframe.locator('[data-tool="contentSelect"]')).toBeVisible()
+    await expect(iframe.locator('[data-tool="contentSelect"]')).toHaveCount(0)
+    // 검색은 독립 feature이므로 계속 노출되고, 열어도 비활성 contentSelect로 전환하지 않음
+    await expect(iframe.getByTestId('pdf-search-open')).toBeVisible()
+    await iframe.getByTestId('pdf-search-open').click()
+    await expect(iframe.getByTestId('pdf-search-input')).toBeFocused()
+    await expect(iframe.locator('[data-tool="pen"]')).toHaveClass(/active/)
+    await iframe.locator('.pdf-search-bar .close-button').click()
     // 기능 토글 — zoom 컨트롤 숨김 (style:display)
     await expect(iframe.locator('.zoom-info')).toBeHidden()
     // 로케일 — 영문 전환
@@ -75,13 +81,25 @@ test.describe('applyConfig 커스터마이징 (SDK 경유)', () => {
     await expect(iframe.locator('[data-tool="pen"]')).toHaveAttribute('title', '펜')
     await expect(authoringTools(iframe)).toHaveCount(1)
 
+    // search=false는 UI뿐 아니라 Ctrl/Cmd+F도 가로채지 않아 브라우저 기본 찾기를 보존
+    await applyConfig(page, { tools: { features: { search: false } } })
+    await expect(iframe.getByTestId('pdf-search-open')).toHaveCount(0)
+    const findPrevented = await iframe.locator('body').evaluate(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'f', ctrlKey: true, cancelable: true
+      })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    })
+    expect(findPrevented).toBe(false)
+
     // text 도구와 thumbnails 기능 플래그는 실제 본문 UI까지 일치
     await applyConfig(page, {
       tools: { enabled: ['text'], defaultTool: 'text', features: { thumbnails: false } }
     })
     await expect(iframe.locator('[data-tool="text"]')).toBeVisible()
     await expect(authoringTools(iframe)).toHaveCount(1)
-    await expect(iframe.locator('[data-tool="contentSelect"]')).toBeVisible()
+    await expect(iframe.locator('[data-tool="contentSelect"]')).toHaveCount(0)
     await expect(iframe.locator('[data-tool="text"]')).toHaveClass(/active/)
     await expect(iframe.locator('.thumbnail-toggle-btn')).toBeHidden()
     await expect(iframe.locator('.thumbnail-sidebar')).toHaveCount(0)
@@ -113,7 +131,7 @@ test.describe('applyConfig 커스터마이징 (SDK 경유)', () => {
 
     await expect.poll(() => rootCssVar(frame2, '--color-primary')).toBe('#e8a045')
     await expect(authoringTools(frame2)).toHaveCount(1)
-    await expect(frame2.locator('[data-tool="contentSelect"]')).toBeVisible()
+    await expect(frame2.locator('[data-tool="contentSelect"]')).toHaveCount(0)
     await expect(frame2.locator('[data-tool="pen"]')).toHaveAttribute('title', 'Pen')
   })
 })

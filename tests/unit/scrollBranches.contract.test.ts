@@ -205,6 +205,49 @@ describe('scroll lifecycle branch contracts', () => {
     expect(mode.pageStateManager.isRendered(1)).toBe(true)
     mode.dispose()
   })
+
+  it('빠른 스크롤 중 지나간 버퍼의 queued 페이지는 idle 뒤 렌더하지 않는다', async () => {
+    vi.useFakeTimers()
+    const pdf = resolvedPdf(10)
+    const mode = createScrollMode({
+      getPdfDoc: () => pdf.document,
+      getTotalPages: () => 10,
+      getViewportScale: () => 1,
+      onPageRendered: vi.fn(),
+      onPageUnrendered: vi.fn()
+    })
+    const container = document.createElement('div')
+    const page10 = document.createElement('div')
+    mode.initialize(container)
+    mode.registerPage(10, page10)
+
+    vi.setSystemTime(1_000)
+    container.dispatchEvent(new Event('scroll'))
+    vi.setSystemTime(1_010)
+    container.scrollTop = 20
+    container.dispatchEvent(new Event('scroll'))
+    expect(mode.isScrollingFast).toBe(true)
+
+    mode.requestRender(1)
+    mode.requestRender(2)
+    mode.requestRender(3)
+    expect(mode.pageStateManager.getQueuedPages()).toEqual([1, 2, 3])
+
+    ObserverHarness.instances[0]!.emit([{ target: page10, isIntersecting: true }])
+
+    expect(mode.pageStateManager.getState(1)).toBe('idle')
+    expect(mode.pageStateManager.getState(2)).toBe('idle')
+    expect(mode.pageStateManager.getState(3)).toBe('idle')
+    expect(mode.pageStateManager.getQueuedPages()).toEqual([8, 9, 10])
+
+    await vi.advanceTimersByTimeAsync(150)
+    await flushMicrotasks()
+
+    const renderedPageNumbers = pdf.getPage.mock.calls.map(([pageNum]) => pageNum)
+    expect(new Set(renderedPageNumbers)).toEqual(new Set([8, 9, 10]))
+    expect(renderedPageNumbers).not.toEqual(expect.arrayContaining([1, 2, 3]))
+    mode.dispose()
+  })
 })
 
 describe('low-resolution preview generation branch contracts', () => {

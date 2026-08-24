@@ -14,6 +14,11 @@ type Dict = Record<string, string>
 
 const BUILTIN: Record<string, Dict> = { ko, en }
 
+function builtinLocaleKey(value: string): string | null {
+  const primaryLanguage = value.toLowerCase().split(/[-_]/, 1)[0]
+  return BUILTIN[primaryLanguage] ? primaryLanguage : null
+}
+
 // 현재 로케일·오버라이드 — 모듈 레벨 $state (컴포넌트 t() 호출 시 의존성 추적됨)
 let locale = $state<string>('ko')
 let overrides = $state<Dict>({})
@@ -38,7 +43,11 @@ export function setLocale(l: string | undefined | null): void {
 
 /** 고객 제공 문구 병합 — 키별 덮어쓰기 (커스텀 언어/문구 커스터마이징) */
 export function setMessages(m: Dict | undefined | null): void {
-  if (m && typeof m === 'object') overrides = { ...overrides, ...m }
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return
+  const validEntries = Object.entries(m).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string'
+  )
+  if (validEntries.length > 0) overrides = { ...overrides, ...Object.fromEntries(validEntries) }
 }
 
 export function currentLocale(): string {
@@ -51,7 +60,7 @@ export function currentLocale(): string {
  * @param params  {name} 등 자리표시자 치환값
  */
 export function t(key: string, params?: Record<string, string | number>): string {
-  const dict = BUILTIN[locale] ?? BUILTIN.ko
+  const dict = BUILTIN[locale] ?? BUILTIN[builtinLocaleKey(locale) ?? 'ko']
   let s = overrides[key] ?? dict[key] ?? BUILTIN.ko[key] ?? key
   if (params) {
     for (const p in params) {

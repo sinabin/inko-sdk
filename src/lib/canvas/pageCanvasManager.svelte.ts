@@ -11,11 +11,16 @@ import { createShapeTools, type ShapeTools } from '../tools/shapeTools.svelte'
 import { createTextMode, type TextMode } from '../tools/textMode.svelte'
 import { createHighlighterMode, type HighlighterMode } from '../tools/highlighterMode.svelte'
 import type { HistoryManager } from '../history'
+import {
+  getPaperCanvasAccessibilityState,
+  type PaperCanvasAccessibilityState
+} from '../accessibility/paperCanvasKeyboard'
 
 export interface PageCanvasManagerOptions {
   onCanvasChange?: () => void
   onTextInputRequest?: (existingText?: string) => void
   onSelectionChange?: (hasSelection: boolean) => void
+  onAccessibilityChange?: (state: PaperCanvasAccessibilityState) => void
   getScrollContainer?: () => HTMLElement | null
   historyManager?: HistoryManager
   pageNum?: number
@@ -55,6 +60,7 @@ export interface PageCanvasManager {
   // Selection operations
   deleteSelected: () => void
   readonly hasSelection: boolean
+  readonly accessibilityState: PaperCanvasAccessibilityState
 
   // State access
   readonly paperCanvas: PaperCanvas | null
@@ -62,7 +68,16 @@ export interface PageCanvasManager {
 }
 
 export function createPageCanvasManager(options: PageCanvasManagerOptions = {}): PageCanvasManager {
-  const { onCanvasChange, onTextInputRequest, onSelectionChange, getScrollContainer, historyManager, pageNum = 1, isReadOnly = false } = options
+  const {
+    onCanvasChange,
+    onTextInputRequest,
+    onSelectionChange,
+    onAccessibilityChange,
+    getScrollContainer,
+    historyManager,
+    pageNum = 1,
+    isReadOnly = false
+  } = options
 
   let paperCanvas: PaperCanvas | null = null
   let drawingMode: DrawingMode | null = null
@@ -93,17 +108,31 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
     pressureSensitivity: brushPressureSensitivity
   })
 
+  function getAccessibilityState(): PaperCanvasAccessibilityState {
+    return getPaperCanvasAccessibilityState(
+      paperCanvas?.scope ?? null,
+      selectionMode?.selectedItem ?? null,
+      pageNum
+    )
+  }
+
+  function emitAccessibilityState(): void {
+    onAccessibilityChange?.(getAccessibilityState())
+  }
+
   /**
    * Handle canvas change with history
    */
   function handleCanvasChange(): void {
     // Push snapshot to history
     if (historyManager && paperCanvas) {
-      const json = paperCanvas.exportJSON()
+      // selection box/cursor 같은 UI-only 객체는 history에도 저장하지 않는다.
+      const json = exportJSON()
       historyManager.pushSnapshot(pageNum, json)
     }
     // Notify external callback
     onCanvasChange?.()
+    emitAccessibilityState()
   }
 
   /**
@@ -227,7 +256,10 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
     selectionMode = createSelectionMode({
       getScope,
       getScrollContainer,
-      onSelectionChange,
+      onSelectionChange: (hasSelection) => {
+        onSelectionChange?.(hasSelection)
+        emitAccessibilityState()
+      },
       onItemModified: handleCanvasChange,
       onItemDeleted: handleCanvasChange
     })
@@ -262,6 +294,7 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
 
     // Activate default tool
     activateTool(currentTool)
+    emitAccessibilityState()
   }
 
   /**
@@ -340,6 +373,7 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
     currentTool = mode
     if (paperCanvas?.isReady) {
       activateTool(mode)
+      emitAccessibilityState()
     }
   }
 
@@ -384,6 +418,7 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
    */
   function clear(): void {
     if (isReadOnly) return
+    selectionMode?.clearSelection()
     paperCanvas?.clear()
     handleCanvasChange()
   }
@@ -423,9 +458,11 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
   function importJSON(json: string): boolean {
     if (paperCanvas && json) {
       try {
+        selectionMode?.clearSelection()
         paperCanvas.importJSON(json)
         // baseline 갱신 — undo 시 이 데이터 상태로 돌아감
         historyManager?.setBaseline(pageNum, json)
+        emitAccessibilityState()
         return true
       } catch (e) {
         console.warn('[PageCanvasManager] Failed to import JSON:', e)
@@ -469,8 +506,10 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
 
     const json = historyManager.undo(pageNum)
     if (json !== null) {
+      selectionMode?.clearSelection()
       paperCanvas.importJSON(json)
       onCanvasChange?.()
+      emitAccessibilityState()
       return true
     }
     return false
@@ -484,8 +523,10 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
 
     const json = historyManager.redo(pageNum)
     if (json !== null) {
+      selectionMode?.clearSelection()
       paperCanvas.importJSON(json)
       onCanvasChange?.()
+      emitAccessibilityState()
       return true
     }
     return false
@@ -512,6 +553,7 @@ export function createPageCanvasManager(options: PageCanvasManagerOptions = {}):
     redo,
 
     get hasSelection() { return selectionMode?.hasSelection ?? false },
+    get accessibilityState() { return getAccessibilityState() },
     get paperCanvas() { return paperCanvas },
     get isReady() { return paperCanvas?.isReady ?? false },
     get canUndo() { return historyManager?.canUndoPage(pageNum) ?? false },

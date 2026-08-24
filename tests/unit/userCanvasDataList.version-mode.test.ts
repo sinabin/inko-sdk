@@ -46,7 +46,7 @@ afterEach(() => {
 })
 
 describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
-  it('현재 버전(v2)은 유일한 선택, 과거 버전(v1)은 이어서 편집 가능', () => {
+  it('현재 버전(v2)은 유일한 선택이고 과거 버전 선택을 요청할 수 있다', () => {
     const onToggleVisibility = vi.fn()
     const onLoadHistory = vi.fn()
     const el = render({
@@ -73,12 +73,12 @@ describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
     expect(v1Select.tabIndex).toBe(-1)
     expect(el.querySelectorAll('.visibility-indicator.visible')).toHaveLength(1)
 
-    // v1 = 과거 버전: 체크박스 + '이어서 편집'
+    // v1 = 과거 버전: 라디오 선택 전에는 별도 이어서 편집 액션을 노출하지 않음
     expect(v1.querySelector('.editing-badge')).toBeNull()
     expect(v1.querySelector('.visibility-indicator')).not.toBeNull()
-    expect(v1.querySelector('.load-btn')?.textContent?.trim()).toBe('이어서 편집')
+    expect(v1.querySelector('.load-btn')).toBeNull()
     expect(v1Select.querySelector('.load-btn')).toBeNull()
-    expect(v1.querySelector(':scope > .item-actions > .load-btn')).not.toBeNull()
+    expect(el.querySelector('.selected-version-actions')).toBeNull()
 
     // 선택된 항목을 다시 눌러도 선택 요청(true)만 전달해 0개 상태를 만들지 않는다.
     v2Select.click()
@@ -90,21 +90,21 @@ describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
     flushSync()
     expect(onToggleVisibility).toHaveBeenCalledWith('v1', true)
 
-    // '이어서 편집' — 카드 토글로 전파되지 않음 (stopPropagation 계약)
-    ;(v1.querySelector('.load-btn') as HTMLElement).click()
-    flushSync()
-    expect(onLoadHistory).toHaveBeenCalledWith('v1')
+    // 부모가 선택 상태를 반영하기 전에는 편집 로드가 발생하지 않음
+    expect(onLoadHistory).not.toHaveBeenCalled()
     expect(onToggleVisibility).toHaveBeenCalledTimes(2)
   })
 
   it('과거 버전(v1) 선택 중에는 하나만 체크되고 재클릭으로 선택 해제되지 않음', () => {
     const onToggleVisibility = vi.fn()
+    const onLoadHistory = vi.fn()
     const el = render({
       userCanvasData: [makeItem('v2'), makeItem('v1', { enabled: true })],
       isVisible: true,
       currentEditCanvasId: 'v2',
       isVersionHistoryMode: true,
-      onToggleVisibility
+      onToggleVisibility,
+      onLoadHistory
     })
 
     const items = Array.from(el.querySelectorAll('.list-item')) as HTMLElement[]
@@ -117,6 +117,10 @@ describe('버전 이력 모드 — 현재 편집 버전 표시', () => {
     expect(v1.classList.contains('enabled')).toBe(true)
     expect(v1.querySelector('.visibility-indicator.visible')).not.toBeNull()
     expect(el.querySelectorAll('.visibility-indicator.visible')).toHaveLength(1)
+    const loadButton = el.querySelector<HTMLButtonElement>('.selected-version-actions .load-btn')!
+    expect(loadButton.textContent?.trim()).toBe('이어서 편집')
+    loadButton.click()
+    expect(onLoadHistory).toHaveBeenCalledWith('v1')
 
     // 선택된 v1 재클릭도 true 선택만 전달하여 0개 선택을 방지한다.
     v1Select.click()
@@ -188,8 +192,10 @@ describe('협업(다중 사용자 레이어) 모드', () => {
     const [u1Select, u2Select] = Array.from(el.querySelectorAll('.item-select')) as HTMLButtonElement[]
     expect(u1.classList.contains('enabled')).toBe(true)
     expect(el.querySelectorAll('[role="radiogroup"], [role="radio"]')).toHaveLength(0)
-    expect(u1Select.getAttribute('aria-pressed')).toBe('true')
-    expect(u2Select.getAttribute('aria-pressed')).toBe('false')
+    expect(u1Select.getAttribute('role')).toBe('checkbox')
+    expect(u2Select.getAttribute('role')).toBe('checkbox')
+    expect(u1Select.getAttribute('aria-checked')).toBe('true')
+    expect(u2Select.getAttribute('aria-checked')).toBe('false')
 
     // 협업 레이어는 버전 radio와 달리 개별 OFF가 허용됨
     u1Select.click()

@@ -37,6 +37,16 @@ export const ko: Record<string, string> = {
   'toolbar.history': '작업 이력',
   'toolbar.save': '저장',
 
+  // 문서 검색
+  'search.region': 'PDF 검색',
+  'search.input': '문서에서 찾기',
+  'search.placeholder': '검색어 입력',
+  'search.previous': '이전 검색 결과',
+  'search.next': '다음 검색 결과',
+  'search.close': '검색 닫기',
+  'search.indexing': '문서 검색 준비 중',
+  'search.noResults': '검색 결과 없음',
+
   // 책갈피(PDF 내장 목차) 패널
   'bookmark.title': '책갈피',
   'bookmark.loading': '목차를 불러오는 중...',
@@ -49,6 +59,8 @@ export const ko: Record<string, string> = {
   'bookmark.expand': '{title} 하위 항목 펼치기',
   'bookmark.collapse': '{title} 하위 항목 접기',
   'bookmark.close': '책갈피 패널 닫기',
+  'bookmark.listLabel': 'PDF 책갈피 목차',
+  'bookmark.keyboardInstructions': '위아래 화살표로 항목을 이동하고, 왼쪽과 오른쪽 화살표로 하위 항목을 접거나 펼칩니다.',
 
   // 작업 이력 패널
   'history.title': '작업 이력',
@@ -58,9 +70,12 @@ export const ko: Record<string, string> = {
   'history.hideUser': '{name} 숨기기',
   'history.showUser': '{name} 보이기',
   'history.close': '작업 이력 닫기',
-  'history.layerVisibility': '{name} 레이어 표시',
+  'history.layerVisibility': '{name} 레이어',
   'history.currentVersion': '현재 편집 중',
   'history.continueEditLabel': '{name}의 {date} 버전에서 이어서 편집',
+  'history.versionPosition': '{current}/{total}',
+  'history.versionSelection': '{name}, {date}, {position}',
+  'history.versionSelectionCurrent': '{name}, {date}, {position}, {current}',
 
   // 공통
   'common.cancel': '취소',
@@ -92,6 +107,33 @@ export const ko: Record<string, string> = {
   'text.instructions': 'Enter 키로 확인하고 Shift+Enter 키로 줄을 바꿉니다. Escape 키로 취소합니다.',
   'text.fontSizeGroup': '글자 크기',
   'text.fontSizeOption': '글자 크기 {size}px',
+  'text.requiredError': '추가할 텍스트를 입력하세요.',
+
+  // PDF 페이지 접근성
+  'document.viewerRegion': 'PDF 문서 보기 영역',
+  'document.pageRegion': 'PDF {n}페이지',
+  'document.pageText': '{n}페이지 텍스트',
+  'document.currentPageAnnouncement': '현재 PDF {n}/{total}페이지',
+  'document.accessibleTextLoading': '{n}페이지 텍스트를 준비하는 중입니다.',
+  'document.accessibleTextImageOnly': '{n}페이지에는 읽을 수 있는 텍스트가 없습니다. 이미지로 구성된 페이지일 수 있습니다.',
+  'document.accessibleTextError': '{n}페이지 텍스트를 읽을 수 없습니다.',
+  'document.canvasCountAnnouncement': 'PDF {n}페이지 편집 주석 {count}개.',
+  'document.canvasSelectionAnnouncement': 'PDF {n}페이지, {kind} {index}/{total} 선택됨. 위치 x {x}, y {y}.',
+  'document.canvasInstructionsSelect': 'Enter로 편집 주석을 순환 선택하고 Shift+Enter로 역순 선택합니다. 화살표 키로 1픽셀, Shift와 화살표 키로 10픽셀 이동합니다. Delete 또는 Backspace로 삭제하고 Escape로 선택을 해제합니다.',
+  'document.canvasInstructionsText': 'Enter를 누르면 페이지 중앙에 텍스트 입력 창이 열립니다.',
+  'document.canvasInstructionsShape': 'Enter를 누르면 페이지 중앙에 기본 크기 도형을 만듭니다.',
+  'document.canvasInstructionsPath': '펜과 형광펜의 자유곡선은 경로 자체가 본질적인 입력이므로 키보드 생성 대상에서 제외됩니다. 키보드에서는 도형 또는 텍스트 도구를 사용할 수 있습니다.',
+  'document.canvasInstructionsEraser': '키보드로 삭제하려면 선택 도구로 전환해 주석을 선택한 뒤 Delete 또는 Backspace를 누릅니다.',
+  'document.canvasInstructionsDefault': 'PDF 페이지 편집 주석 캔버스입니다.',
+  'document.annotationKind.text': '텍스트',
+  'document.annotationKind.drawing': '그리기',
+  'document.annotationKind.group': '그룹',
+  'document.annotationKind.image': '이미지',
+  'document.annotationKind.annotation': '주석 객체',
+  'document.pageAnnotations': '{n}페이지 PDF 양식과 주석',
+  'document.annotationControl': '{n}페이지 PDF 제어 {index}',
+  'document.editableCanvas': '{n}페이지 편집 주석',
+  'document.reviewCanvas': '{n}페이지 검토 주석 레이어',
 
   // 토스트 카테고리
   'error.categoryParse': '데이터',
@@ -115,6 +157,8 @@ export const ko: Record<string, string> = {
   'thumbnails.listLabel': '페이지 목록',
   'thumbnails.noPdf': '불러온 PDF가 없습니다',
   'thumbnails.loadingList': '썸네일 로딩 중... ({n}/{total})',
+  'thumbnails.loadingStarted': '페이지 썸네일을 불러오는 중입니다.',
+  'thumbnails.loadingComplete': '페이지 썸네일 {total}개를 모두 불러왔습니다.',
   'thumbnail.loading': '로딩 중...',
   'thumbnail.error': '오류',
   'thumbnail.pageLabel': '{n}페이지',

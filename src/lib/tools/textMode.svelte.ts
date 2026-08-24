@@ -48,6 +48,7 @@ export function createTextMode(options: TextModeOptions) {
   let handlePointerDown: ((e: PointerEvent) => void) | null = null
   let handlePointerMove: ((e: PointerEvent) => void) | null = null
   let handlePointerUp: ((e: PointerEvent) => void) | null = null
+  let handleKeyDown: ((e: KeyboardEvent) => void) | null = null
 
   /**
    * PointerEvent 좌표 → Paper.js project 좌표 변환
@@ -230,10 +231,34 @@ export function createTextMode(options: TextModeOptions) {
       try { canvasElement!.releasePointerCapture(e.pointerId) } catch {}
     }
 
+    handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target !== canvasElement ||
+        e.key !== 'Enter' ||
+        e.repeat ||
+        e.ctrlKey || e.metaKey || e.altKey || e.shiftKey ||
+        activePointerId !== null
+      ) return
+      if (requestInputAtPageCenter()) e.preventDefault()
+    }
+
     canvasElement.addEventListener('pointerdown', handlePointerDown)
     canvasElement.addEventListener('pointermove', handlePointerMove)
     canvasElement.addEventListener('pointerup', handlePointerUp)
     canvasElement.addEventListener('pointercancel', handlePointerUp)
+    canvasElement.addEventListener('keydown', handleKeyDown)
+  }
+
+  /** 캔버스 포커스 상태의 Enter가 포인터 탭과 동일한 텍스트 입력 흐름을 연다. */
+  function requestInputAtPageCenter(): boolean {
+    const scope = getScope()
+    if (!scope?.view) return false
+    scope.activate()
+    pendingPosition = scope.view.center.clone()
+    editingText = null
+    showCursorIndicator(pendingPosition)
+    onRequestInput?.()
+    return true
   }
 
   /** 텍스트 모드 비활성화 */
@@ -248,12 +273,14 @@ export function createTextMode(options: TextModeOptions) {
         canvasElement.removeEventListener('pointerup', handlePointerUp)
         canvasElement.removeEventListener('pointercancel', handlePointerUp)
       }
+      if (handleKeyDown) canvasElement.removeEventListener('keydown', handleKeyDown)
     }
 
     canvasElement = null
     handlePointerDown = null
     handlePointerMove = null
     handlePointerUp = null
+    handleKeyDown = null
     activePointerId = null
     pointerDownPoint = null
     pointerDownType = 'mouse'
@@ -356,6 +383,7 @@ export function createTextMode(options: TextModeOptions) {
     activate,
     deactivate,
     cancelOperation,
+    requestInputAtPageCenter,
     confirmText,
     cancelText,
     addTextAt

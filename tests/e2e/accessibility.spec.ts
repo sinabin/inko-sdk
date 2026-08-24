@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { waitForViewerReady } from './helpers'
+import { openSdkHostWithReviewHistory, waitForViewerReady } from './helpers'
 
 test.describe('접근성 시맨틱·키보드 기준선', () => {
   test.beforeEach(async ({ page }) => {
@@ -50,30 +50,19 @@ test.describe('접근성 시맨틱·키보드 기준선', () => {
   })
 
   test('작업 이력 disclosure가 panel 연결·초기 포커스·Escape 복귀를 지킨다', async ({ page }) => {
-    await page.evaluate(() => {
-      localStorage.setItem('pdfv_canvas_history:inko-demo.pdf', JSON.stringify([{
-        canvasId: 'a11y-history-v1',
-        userName: 'Local User',
-        userId: 'local',
-        canvasData: '{}',
-        registeredAt: '2026-08-24 10:00:00',
-        version: 1
-      }]))
-    })
-    await page.reload()
-    await waitForViewerReady(page)
-    const history = page.locator('.history-btn')
-    await expect(history).toBeVisible({ timeout: 15_000 })
+    const frame = await openSdkHostWithReviewHistory(page)
+    const history = frame.locator('.history-btn')
     await expect(history).toHaveAccessibleName('작업 이력')
     await expect(history).toHaveAttribute('aria-controls', 'user-canvas-history-panel')
 
     await history.click()
     await expect(history).toHaveAttribute('aria-expanded', 'true')
-    const panel = page.getByRole('region', { name: '작업 이력' })
+    const panel = frame.getByRole('region', { name: '작업 이력' })
     await expect(panel).toBeVisible()
-    await expect(panel.getByRole('button', { name: '작업 이력 닫기' })).toBeFocused()
+    const close = panel.getByRole('button', { name: '작업 이력 닫기' })
+    await expect(close).toBeFocused()
 
-    await page.keyboard.press('Escape')
+    await close.press('Escape')
     await expect(panel).toHaveCount(0)
     await expect(history).toBeFocused()
   })

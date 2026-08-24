@@ -20,6 +20,8 @@ to make the implementation and its limits directly verifiable.
 - Native PDF text selection/copy plus Unicode literal search across virtualized pages
 - PDF.js native annotations, safe internal/external links, and AcroForm display/input
 - `exportPdf()` for an `ArrayBuffer` containing current AcroForm values
+- `exportFlattenedPdf()` for a standalone PDF with AcroForms plus supported Inko
+  drawing types burned into page content; omissions and failures are reported per item
 - Pen, highlighter, eraser, text, shape, selection, zoom, and thumbnail tools
 - A bookmark panel built from the PDF's embedded outline, shown only when the
   document actually carries one
@@ -79,13 +81,26 @@ cp node_modules/inko-pdf-sdk/sdk/inko-sdk.js public/inko-sdk.js
 
   // Separate binary path: native AcroForm values are written into PDF bytes.
   const pdfBytes = await viewer.exportPdf()
+
+  // Delivery copy: AcroForms + every current Inko drawing, no canvasData embedded.
+  const { pdfBytes: deliveryPdf, report } = await viewer.exportFlattenedPdf()
+  if (report.hasFailures) throw new Error('Some annotations could not be flattened')
 </script>
 ```
 
-`canvasData` and `exportPdf()` are deliberately separate contracts.
+`canvasData`, `exportPdf()`, and `exportFlattenedPdf()` are deliberately separate contracts.
 `canvasData` preserves Inko's editable Paper.js drawing/review state;
 `exportPdf()` returns PDF.js `saveDocument()` bytes with native AcroForm state.
-It does not flatten or merge Inko drawings into the PDF.
+It does not merge Inko drawings. `exportFlattenedPdf()` starts from those saved
+AcroForm bytes and writes pen, highlighter, text, rectangle, circle, and line
+objects into every affected PDF page. The result is portable but no longer an
+editable Inko state, so hosts that need resume-editing must still persist
+`canvasData`. Inspect `report.hasFailures`; a content rewrite also cannot preserve
+an existing CMS/PAdES cryptographic signature. Helvetica-compatible PointText
+stays PDF text. Other Unicode PointText is rendered with the bundled OFL
+Pretendard font into a high-resolution transparent image and reported as
+`TEXT_RASTERIZED`; that fallback text is visual content rather than selectable
+PDF text. Pretendard is loaded only when this fallback is needed.
 
 For cross-origin iframe deployments, configure `VITE_ALLOWED_ORIGINS` at build
 time and apply the required HTTP CSP/CORS headers in the host environment. See
@@ -141,10 +156,12 @@ sha256sum --check SHA256SUMS
 npm audit signatures
 ```
 
-GitHub build attestations can also be verified with:
+The release workflow creates two separate GitHub attestations for the same
+tarball: SLSA build provenance and a CycloneDX SBOM attestation. Verify their
+signatures and repository identity with:
 
 ```bash
-gh attestation verify inko-pdf-sdk-1.1.0.tgz --repo sinabin/inko-sdk
+gh attestation verify inko-pdf-sdk-1.2.0.tgz --repo sinabin/inko-sdk
 ```
 
 ## Documentation

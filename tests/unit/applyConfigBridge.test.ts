@@ -35,7 +35,7 @@ describe('postMessageBridge — applyConfig 라우팅 (고객 커스터마이징
   beforeEach(() => {
     __resetTrustedParentOriginForTesting()
     cb = makeCallbacks({ onApplyConfig: vi.fn() })
-    cleanup = initPostMessageBridge(cb)
+    cleanup = initPostMessageBridge(cb, undefined, null)
   })
 
   afterEach(() => cleanup())
@@ -52,7 +52,7 @@ describe('postMessageBridge — applyConfig 라우팅 (고객 커스터마이징
     expect(cb.onApplyConfig).toHaveBeenCalledWith(config)
   })
 
-  it('data 누락 시 빈 객체로 호출 — 현 구현 계약 (applyViewerConfig가 안전 no-op 처리)', () => {
+  it('data 누락 시 안전한 빈 설정 객체로 라우팅한다', () => {
     dispatch('applyConfig')
     expect(cb.onApplyConfig).toHaveBeenCalledWith({})
   })
@@ -66,14 +66,14 @@ describe('postMessageBridge — applyConfig 라우팅 (고객 커스터마이징
     cleanup()
     __resetTrustedParentOriginForTesting()
     const legacy = makeCallbacks() // onApplyConfig 없음
-    cleanup = initPostMessageBridge(legacy)
+    cleanup = initPostMessageBridge(legacy, undefined, null)
     expect(() => dispatch('applyConfig', { locale: 'en' })).not.toThrow()
     expect(legacy.onSaveCanvas).not.toHaveBeenCalled()
   })
 
   it('다른 메시지 타입은 onApplyConfig를 호출하지 않음 (교차 라우팅 없음)', () => {
     dispatch('saveCanvas')
-    dispatch('loadUserCanvasData', [{ canvasId: 'v1' }])
+    dispatch('loadUserCanvasData', [{ canvasId: 'v1', canvasData: '{}' }])
     expect(cb.onApplyConfig).not.toHaveBeenCalled()
     expect(cb.onSaveCanvas).toHaveBeenCalledTimes(1)
     expect(cb.onLoadUserCanvasData).toHaveBeenCalledTimes(1)

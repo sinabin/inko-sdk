@@ -3,95 +3,244 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Inko 120p performance harness</title>
+  <title>Inko mixed 120p performance harness</title>
   <style>
     html, body { height: 100%; margin: 0; overflow: hidden; }
-    /* 612pt fixture + viewer content horizontal padding 32px = fit-width 1.0 */
-    #viewer { width: 644px; height: 100%; overflow: hidden; }
+    #viewer { width: 720px; height: 100%; overflow: hidden; }
   </style>
 </head>
 <body>
   <div id="viewer"></div>
-  <script src="/pdfv/sdk/pdfv-sdk.js"></script>
   <script>
     window.__inkoPerf = {
       hostStartedAt: performance.now(),
-      readyAt: null,
-      loadStartedAt: null,
-      loadStartedEpochMs: null,
-      pdfLoadedAt: null,
-      phase: 'boot',
-      errors: []
+      hostStartedEpochMs: Date.now(),
+      sdkReadyAt: null,
+      viewerReadyAt: null,
+      phase: 'sdk-loading',
+      errors: [],
+      continueWarm: null,
+      cold: {
+        loadStartedAt: null,
+        firstPageReadyAt: null,
+        previewsReadyAt: null,
+        previewMetrics: null
+      },
+      warm: {
+        loadStartedAt: null,
+        firstPageReadyAt: null,
+        previewsReadyAt: null,
+        previewMetrics: null
+      }
     };
+  </script>
+  <script src="/pdfv/sdk/pdfv-sdk.js"></script>
+  <script>
+    (function () {
+      var EXPECTED_PAGES = 120;
+      var FIXTURE_URL = '/pdfv/perf/inko-perf-v2-120p.pdf';
+      var state = window.__inkoPerf;
+      state.sdkReadyAt = performance.now();
+      state.phase = 'viewer-loading';
 
-    function startMeasuredLoad() {
-      if (window.__inkoPerf.phase !== 'priming') return;
-      window.__inkoPerf.phase = 'measured';
-      var frameWindow = window.__inkoPerf.viewer.iframe.contentWindow;
-      var metrics = frameWindow && frameWindow.__inkoPerfMetrics;
-      if (metrics) {
-        metrics.longTasks.length = 0;
-        metrics.jpegCreated.length = 0;
-        metrics.revoked.length = 0;
+      function metrics() {
+        var frameWindow = state.viewer && state.viewer.iframe && state.viewer.iframe.contentWindow;
+        return frameWindow && frameWindow.__inkoPerfMetrics;
       }
-      window.__inkoPerf.loadStartedAt = performance.now();
-      window.__inkoPerf.loadStartedEpochMs = Date.now();
-      window.__inkoPerf.viewer.loadPdfUrl(
-        '/pdfv/perf/inko-perf-v1-120p.pdf',
-        'inko-perf-v1-120p.pdf',
-        undefined,
-        true
-      );
-    }
 
-    function waitForPrimedPageCount() {
-      if (window.__inkoPerf.phase !== 'priming') return;
-      var doc = window.__inkoPerf.viewer.iframe.contentDocument;
-      if (doc && doc.querySelectorAll('.scroll-page-container').length === 120) {
-        requestAnimationFrame(function () { requestAnimationFrame(startMeasuredLoad); });
-        return;
+      function fail(reason) {
+        var message = reason instanceof Error ? reason.message : String(reason);
+        state.errors.push(message);
+        state.phase = 'failed';
       }
-      setTimeout(waitForPrimedPageCount, 16);
-    }
 
-    window.__inkoPerf.viewer = Inko.mount('#viewer', {
-      src: '/pdfv/index.html',
-      readOnly: true,
-      tools: {
-        features: {
-          save: false,
-          history: false,
-          bookmarks: false,
-          thumbnails: false,
-          orientation: false
-        }
-      },
-      onReady: function () {
-        window.__inkoPerf.readyAt = performance.now();
-        // 첫 load는 page-count 반응 상태만 예열하는 비계측 단계다.
-        // 같은 fixture를 다시 여는 공개 loadPdfUrl 교체 경로부터 시간을 측정한다.
-        setTimeout(function () {
-          window.__inkoPerf.phase = 'priming';
-          window.__inkoPerf.viewer.loadPdfUrl(
-            '/pdfv/perf/inko-perf-v1-120p.pdf',
-            'inko-perf-v1-120p.pdf',
-            undefined,
-            true
+      function nextAnimationFrame() {
+        return new Promise(function (resolve) { requestAnimationFrame(resolve); });
+      }
+
+      function isCanvasPainted(canvas) {
+        if (!canvas || canvas.width <= 0 || canvas.height <= 0) return false;
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return false;
+        var ratios = [0.1, 0.5, 0.9];
+        return ratios.some(function (xRatio) {
+          return ratios.some(function (yRatio) {
+            var x = Math.min(canvas.width - 1, Math.max(0, Math.floor(canvas.width * xRatio)));
+            var y = Math.min(canvas.height - 1, Math.max(0, Math.floor(canvas.height * yRatio)));
+            return context.getImageData(x, y, 1, 1).data[3] > 0;
+          });
+        });
+      }
+
+      async function waitForPaintedFirstPage(label) {
+        var started = performance.now();
+        while (performance.now() - started < 10000) {
+          var frameDocument = state.viewer && state.viewer.iframe &&
+            state.viewer.iframe.contentDocument;
+          var canvas = frameDocument && frameDocument.querySelector(
+            '[data-page="1"] .scroll-page-canvas-pdf'
           );
-          waitForPrimedPageCount();
-        }, 0);
-      },
-      onPdfLoaded: function () {
-        if (window.__inkoPerf.phase === 'priming') {
-          setTimeout(startMeasuredLoad, 0);
-          return;
+
+          if (isCanvasPainted(canvas)) return;
+
+          await nextAnimationFrame();
         }
-        window.__inkoPerf.pdfLoadedAt = performance.now();
-      },
-      onError: function (error) {
-        window.__inkoPerf.errors.push(String(error && error.message ? error.message : error));
+
+        throw new Error(label + ' first-page canvas was not actually painted');
       }
-    });
+
+      async function waitForAllPagesPainted(label) {
+        var started = performance.now();
+        while (performance.now() - started < 10000) {
+          var frameDocument = state.viewer && state.viewer.iframe &&
+            state.viewer.iframe.contentDocument;
+          var pages = frameDocument && Array.from(
+            frameDocument.querySelectorAll('.scroll-page-container')
+          );
+          if (pages && pages.length === EXPECTED_PAGES) {
+            var paintedPages = pages.filter(function (page) {
+              var preview = page.querySelector('.page-preview');
+              if (preview && preview.complete && preview.naturalWidth > 0 && preview.naturalHeight > 0) {
+                return true;
+              }
+              return isCanvasPainted(page.querySelector('.scroll-page-canvas-pdf'));
+            });
+            if (paintedPages.length === EXPECTED_PAGES) return;
+          }
+          await nextAnimationFrame();
+        }
+        throw new Error(label + ' did not paint all 120 pages as canvas or decoded preview');
+      }
+
+      async function waitForPreviewGeneration(label) {
+        var started = performance.now();
+        var stableChecks = 0;
+
+        while (performance.now() - started < 60000) {
+          var instrumentation = metrics();
+          if (!instrumentation || instrumentation.previewInstrumentationSupported !== true) {
+            throw new Error('preview Blob instrumentation is unavailable');
+          }
+
+          var snapshot = instrumentation.previewSnapshot();
+          if (snapshot.created > EXPECTED_PAGES ||
+              snapshot.liveCurrentGenerationCount > EXPECTED_PAGES) {
+            throw new Error(label + ' preview generation exceeded the 120-page contract');
+          }
+
+          if (snapshot.created === EXPECTED_PAGES &&
+              snapshot.liveCount === EXPECTED_PAGES &&
+              snapshot.liveCurrentGenerationCount === EXPECTED_PAGES) {
+            stableChecks++;
+            if (stableChecks >= 3) return snapshot;
+          } else {
+            stableChecks = 0;
+          }
+
+          await nextAnimationFrame();
+        }
+
+        throw new Error(label + ' previews did not reach an exact stable set of 120');
+      }
+
+      async function finishCold() {
+        try {
+          await waitForPreviewGeneration('cold');
+          if (state.phase !== 'cold-previews') return;
+          await waitForAllPagesPainted('cold');
+          if (state.phase !== 'cold-previews') return;
+          state.cold.previewsReadyAt = performance.now();
+          state.cold.previewMetrics = metrics().previewSnapshot();
+          state.phase = 'cold-complete';
+        } catch (error) {
+          fail(error);
+        }
+      }
+
+      function startWarmMeasurement() {
+        if (state.phase !== 'cold-complete') {
+          throw new Error('warm measurement can only start after cold measurement completes');
+        }
+        var instrumentation = metrics();
+        instrumentation.resetPreviewMetrics('warm');
+        state.phase = 'warm-loading';
+        state.warm.loadStartedAt = performance.now();
+        state.viewer.loadPdfUrl(FIXTURE_URL, 'inko-perf-v2-120p.pdf', undefined, true);
+      }
+
+      state.continueWarm = startWarmMeasurement;
+
+      async function finishWarm() {
+        try {
+          await waitForPreviewGeneration('warm');
+          if (state.phase !== 'warm-previews') return;
+          await waitForAllPagesPainted('warm');
+          if (state.phase !== 'warm-previews') return;
+          state.warm.previewsReadyAt = performance.now();
+          state.warm.previewMetrics = metrics().previewSnapshot();
+          state.phase = 'complete';
+        } catch (error) {
+          fail(error);
+        }
+      }
+
+      async function finishColdFirstPage() {
+        try {
+          await waitForPaintedFirstPage('cold');
+          if (state.phase !== 'cold-first-page') return;
+          state.cold.firstPageReadyAt = performance.now();
+          state.phase = 'cold-previews';
+          await finishCold();
+        } catch (error) {
+          fail(error);
+        }
+      }
+
+      async function finishWarmFirstPage() {
+        try {
+          await waitForPaintedFirstPage('warm');
+          if (state.phase !== 'warm-first-page') return;
+          state.warm.firstPageReadyAt = performance.now();
+          state.phase = 'warm-previews';
+          await finishWarm();
+        } catch (error) {
+          fail(error);
+        }
+      }
+
+      state.viewer = Inko.mount('#viewer', {
+        src: '/pdfv/index.html',
+        readOnly: true,
+        tools: {
+          features: {
+            save: false,
+            history: false,
+            bookmarks: false,
+            thumbnails: false,
+            orientation: false
+          }
+        },
+        onReady: function () {
+          if (state.phase !== 'viewer-loading') return;
+          state.viewerReadyAt = performance.now();
+          state.phase = 'cold-loading';
+          state.cold.loadStartedAt = performance.now();
+          state.viewer.loadPdfUrl(FIXTURE_URL, 'inko-perf-v2-120p.pdf', undefined, true);
+        },
+        onPdfLoaded: function () {
+          if (state.phase === 'cold-loading') {
+            state.phase = 'cold-first-page';
+            void finishColdFirstPage();
+            return;
+          }
+          if (state.phase === 'warm-loading') {
+            state.phase = 'warm-first-page';
+            void finishWarmFirstPage();
+          }
+        },
+        onError: fail
+      });
+    })();
   </script>
 </body>
 </html>

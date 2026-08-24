@@ -128,6 +128,26 @@ describe('eraserMode rare branch contracts', () => {
     expect(detached.data.source).toBe('edge-fragment')
   })
 
+  it('스타일과 메타데이터가 없는 Path도 split 후 안전하게 제거한다', () => {
+    const { scope, canvas } = fixture()
+    outline.factory = (_path, _width, currentScope) => largeOutline(currentScope)
+    const target = new scope.Path.Line({
+      from: [20, 100], to: [200, 100], strokeColor: 'black'
+    })
+    Object.defineProperty(target, 'strokeColor', { configurable: true, get: () => null })
+    Object.defineProperty(target, 'data', { configurable: true, get: () => null })
+    vi.spyOn(target, 'getIntersections').mockReturnValue([
+      { offset: 100 }, { offset: 50 }
+    ] as any)
+    vi.spyOn(target, 'splitAt').mockReturnValue(null)
+
+    const mode = createEraserMode({ getScope: () => scope })
+    mode.activate()
+    erase(canvas)
+
+    expect(target.parent).toBeNull()
+  })
+
   it('빈 CompoundPath subtract 결과를 제거한다', () => {
     const { scope, canvas } = fixture()
     outline.factory = (_path, _width, currentScope) => largeOutline(currentScope)

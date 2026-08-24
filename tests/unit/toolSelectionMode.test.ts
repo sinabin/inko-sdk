@@ -231,10 +231,13 @@ describe('selectionMode', () => {
   })
 
   it('키보드는 편집 target을 존중하고 Delete/Backspace/Escape를 처리한다', () => {
-    const { scope } = scopeFixture()
+    const { scope, canvas } = scopeFixture()
     const onItemDeleted = vi.fn()
     const mode = createSelectionMode({ getScope: () => scope, onItemDeleted })
     mode.activate()
+    canvas.tabIndex = 0
+    canvas.focus()
+    expect(document.activeElement).toBe(canvas)
     const item = rectangle(scope)
     mode.selectItem(item)
     for (const target of [document.createElement('input'), document.createElement('textarea')]) {
@@ -244,12 +247,57 @@ describe('selectionMode', () => {
     Object.defineProperty(editable, 'isContentEditable', { value: true })
     editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
     expect(item.parent).not.toBeNull()
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(mode.hasSelection).toBe(false)
     mode.selectItem(item)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
     expect(item.parent).toBeNull()
     expect(onItemDeleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('Enter 순환·Shift+Enter 역순과 Arrow 1px/Shift+Arrow 10px 이동은 실제 표시 객체만 처리한다', () => {
+    const { scope, canvas } = scopeFixture()
+    const first = rectangle(scope, 10, 10)
+    const hidden = rectangle(scope, 20, 20)
+    hidden.visible = false
+    const selectionUi = rectangle(scope, 30, 30)
+    selectionUi.data = { isSelectionUI: true }
+    const preview = rectangle(scope, 40, 40)
+    preview.data = { isPreview: true }
+    const locked = rectangle(scope, 50, 50)
+    locked.locked = true
+    const second = rectangle(scope, 60, 60)
+    const onItemModified = vi.fn()
+    const mode = createSelectionMode({ getScope: () => scope, onItemModified })
+    mode.activate()
+    canvas.focus()
+
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    canvas.dispatchEvent(enter)
+    expect(enter.defaultPrevented).toBe(true)
+    expect(mode.selectedItem).toBe(first)
+
+    const before = first.position.clone()
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowRight', bubbles: true, cancelable: true
+    }))
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true
+    }))
+    expect(first.position.x).toBeCloseTo(before.x + 1)
+    expect(first.position.y).toBeCloseTo(before.y + 10)
+    expect(onItemModified).toHaveBeenCalledTimes(2)
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(mode.selectedItem).toBe(second)
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', shiftKey: true, bubbles: true
+    }))
+    expect(mode.selectedItem).toBe(first)
+
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    canvas.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
   })
 
   it('touchstart는 단일 handle/item에서만 preventDefault한다', () => {

@@ -1,0 +1,69 @@
+.inko-toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.inko-toolbar-section--divided::before {
+  content: '';
+  width: 1px;
+  height: 28px;
+  background: var(--color-border-light);
+  margin-right: var(--space-1);
+  flex-shrink: 0;
+}
+
+.inko-toolbar-button {
+  padding: var(--space-1_5) var(--space-3);
+  border: 1px solid var(--glass-border-btn);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-btn);
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  transition: all var(--motion-fast) var(--ease-out);
+  min-height: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--glass-gloss-top);
+}
+
+.inko-toolbar-button:hover:not(:disabled) {
+  background: var(--glass-bg-btn-hover);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.inko-toolbar-button:active:not(:disabled) {
+  background: var(--glass-bg-btn-active);
+}
+
+.inko-toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.inko-toolbar-button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (orientation: portrait) {
+  .inko-toolbar-section {
+    gap: var(--space-1_5);
+  }
+}
+
+@media (orientation: landscape) {
+  .inko-toolbar-section {
+    gap: var(--space-1);
+  }
+
+  .inko-toolbar-button {
+    min-height: 36px;
+    min-width: 36px;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-size-sm);
+  }
+}

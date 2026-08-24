@@ -188,6 +188,26 @@ export function createPageDimensionStore(
     )
   }
 
+  /** 실제 렌더 결과로 확인한 1.0x 치수를 현재 문서 세대에 반영 */
+  function set(pageNumber: number, value: PageDimensions): boolean {
+    assertPositiveInteger(pageNumber, 'pageNumber')
+    if (!Number.isFinite(value.width) || value.width <= 0 ||
+        !Number.isFinite(value.height) || value.height <= 0) {
+      throw new TypeError('page dimensions must be finite positive numbers')
+    }
+    if (disposed) return false
+
+    const current = dimensions.get(pageNumber)
+    if (current && Math.abs(current.width - value.width) <= 0.5 &&
+        Math.abs(current.height - value.height) <= 0.5) {
+      return false
+    }
+
+    dimensions = new Map(dimensions)
+    dimensions.set(pageNumber, { ...value })
+    return true
+  }
+
   /** 진행 중 문서 요청의 세대를 무효화하고 모든 참조 해제 */
   function dispose(): void {
     if (disposed) return
@@ -209,6 +229,7 @@ export function createPageDimensionStore(
     waitForIdle,
     get,
     getAll,
+    set,
     dispose
   }
 }

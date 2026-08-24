@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   FIXTURE_PAGE_COUNT,
+  FIXTURE_IMAGE_VARIANTS,
   FIXTURE_VERSION,
   generatePerformanceFixture,
   inspectFixture
@@ -15,6 +16,9 @@ interface FixtureManifest {
   pages: number
   bytes: number
   sha256: string
+  pageSizeSignatures: string[]
+  rotations: number[]
+  syntheticImageVariants: number
 }
 
 describe('120p 성능 fixture 계약', () => {
@@ -30,10 +34,13 @@ describe('120p 성능 fixture 계약', () => {
 
     expect(FIXTURE_VERSION).toBe(manifest.version)
     expect(FIXTURE_PAGE_COUNT).toBe(manifest.pages)
+    expect(FIXTURE_IMAGE_VARIANTS).toBe(manifest.syntheticImageVariants)
     expect(firstInfo).toEqual({
       pages: manifest.pages,
       bytes: manifest.bytes,
-      sha256: manifest.sha256
+      sha256: manifest.sha256,
+      pageSizeSignatures: manifest.pageSizeSignatures,
+      rotations: manifest.rotations
     })
     expect(secondInfo).toEqual(firstInfo)
     expect(second.equals(first)).toBe(true)

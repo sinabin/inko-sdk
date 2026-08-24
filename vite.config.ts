@@ -16,7 +16,8 @@ function cspInjectionPlugin(): Plugin {
     "img-src 'self' blob: data:",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    // exportPdf()/exportFlattenedPdf() 바이트를 Blob URL로 다시 여는 SDK 계약과 일치
+    "connect-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'none'"
