@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -20,15 +23,18 @@ concurrency:
 
 jobs:
   publish:
+    if: github.repository == 'sinabin/inko-sdk'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: release
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out the requested tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
       - name: Set up Node.js and npm registry
@@ -43,8 +49,6 @@ jobs:
 
       - name: Verify tag and package version
         shell: bash
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           test "$RELEASE_TAG" = "v$VERSION"
@@ -107,7 +111,7 @@ jobs:
           mapfile -t ARCHIVES < <(find . -maxdepth 1 -type f -name '*.tgz' -printf '%f\n')
           test "${#ARCHIVES[@]}" -eq 1
           echo "tarball=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
-          echo "sbom=inko-${{ inputs.tag }}.sbom.cdx.json" >> "$GITHUB_OUTPUT"
+          echo "sbom=inko-${RELEASE_TAG}.sbom.cdx.json" >> "$GITHUB_OUTPUT"
 
       - name: Verify clean installation and browser round trip
         run: >-
@@ -154,24 +158,28 @@ jobs:
         if: steps.npm_state.outputs.published != 'true'
         run: npm publish "${{ steps.artifact.outputs.tarball }}" --access public --provenance
 
-      - name: Create GitHub release from the same artifacts
+      - name: Create or refresh GitHub release from the same artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
           TARBALL: ${{ steps.artifact.outputs.tarball }}
           SBOM: ${{ steps.artifact.outputs.sbom }}
-        run: >-
-          gh release create "$RELEASE_TAG"
-          "$TARBALL" "$SBOM" SHA256SUMS
-          --verify-tag
-          --title "Inko $RELEASE_TAG"
-          --generate-notes
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              "$TARBALL" "$SBOM" SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "$TARBALL" "$SBOM" SHA256SUMS \
+              --verify-tag \
+              --title "Inko $RELEASE_TAG" \
+              --generate-notes
+          fi
 
       - name: Preserve release evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: inko-release-${{ inputs.tag }}
+          name: inko-release-${{ env.RELEASE_TAG }}
           if-no-files-found: warn
           retention-days: 90
           path: |
