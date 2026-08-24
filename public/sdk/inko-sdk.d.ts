@@ -44,6 +44,11 @@ export interface ViewerTools {
     save?: boolean;
     history?: boolean;
     thumbnails?: boolean;
+    /**
+     * Bookmark panel showing the PDF's embedded outline.
+     * The button only appears when the loaded document actually has an outline.
+     */
+    bookmarks?: boolean;
     zoom?: boolean;
     orientation?: boolean;
     undoRedo?: boolean;

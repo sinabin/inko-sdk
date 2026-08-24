@@ -293,16 +293,38 @@ def generate(output: Path) -> None:
     pdf.setKeywords("Inko, NextH, synthetic fixture, PDF SDK, open source")
     pdf.setCreator("NextH Inko OSS fixture generator")
 
+    # Outline (bookmark) entries are part of the fixture on purpose: the viewer
+    # extracts them through pdf.js getOutline(), so the fixture must exercise both
+    # top-level entries and a nested level to cover the tree UI.
     draw_cover(pdf)
+    pdf.bookmarkPage("sec-cover")
+    pdf.addOutlineEntry("Cover", "sec-cover", level=0)
     pdf.showPage()
+
     draw_summary(pdf)
+    pdf.bookmarkPage("sec-summary")
+    pdf.addOutlineEntry("Executive summary", "sec-summary", level=0)
     pdf.showPage()
+
     draw_table_page(pdf, 3)
+    pdf.bookmarkPage("sec-specification")
+    pdf.addOutlineEntry("Specification table", "sec-specification", level=0)
     pdf.showPage()
+
     for page_number in range(4, 12):
         draw_annotation_page(pdf, page_number, page_number - 4)
+        if page_number == 4:
+            pdf.bookmarkPage("sec-annotations")
+            pdf.addOutlineEntry("Annotation samples", "sec-annotations", level=0)
+        pdf.bookmarkPage(f"sec-annotation-{page_number}")
+        pdf.addOutlineEntry(
+            f"Sample {page_number - 3}", f"sec-annotation-{page_number}", level=1
+        )
         pdf.showPage()
+
     draw_final_page(pdf)
+    pdf.bookmarkPage("sec-checklist")
+    pdf.addOutlineEntry("Integration checklist", "sec-checklist", level=0)
     pdf.save()
 
 

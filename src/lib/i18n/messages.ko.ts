@@ -24,8 +24,23 @@ export const ko: Record<string, string> = {
   'toolbar.orientationLandscape': '가로 보기',
   'toolbar.orientationPortrait': '세로 보기',
   'toolbar.deleteSelection': '선택 삭제',
+  'toolbar.bookmarksShow': '책갈피 표시',
+  'toolbar.bookmarksHide': '책갈피 숨기기',
+
   'toolbar.history': '작업 이력',
   'toolbar.save': '저장',
+
+  // 책갈피(PDF 내장 목차) 패널
+  'bookmark.title': '책갈피',
+  'bookmark.loading': '목차를 불러오는 중...',
+  'bookmark.outlineEmpty': '이 PDF에는 목차 정보가 없습니다.',
+  'bookmark.untitled': '제목 없음',
+  'bookmark.pageLabel': '{n}페이지',
+  'bookmark.goToPage': '{title} — {page}로 이동',
+  'bookmark.unresolved': '{title} — 이동할 위치를 찾을 수 없음',
+  'bookmark.expand': '{title} 하위 항목 펼치기',
+  'bookmark.collapse': '{title} 하위 항목 접기',
+  'bookmark.close': '책갈피 패널 닫기',
 
   // 작업 이력 패널
   'history.title': '작업 이력',

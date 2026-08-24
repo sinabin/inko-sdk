@@ -18,6 +18,8 @@ to make the implementation and its limits directly verifiable.
 
 - PDF rendering powered by PDF.js
 - Pen, highlighter, eraser, text, shape, selection, zoom, and thumbnail tools
+- A bookmark panel built from the PDF's embedded outline, shown only when the
+  document actually carries one
 - Editable state export and restoration through `canvasData`
 - Review-state overlays through `loadUserCanvasOverlay()`
 - Exactly-one version-history selection when one overlay entry declares `isCurrent: true`

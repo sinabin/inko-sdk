@@ -19,7 +19,7 @@
  *     // ── 커스터마이징 (모두 선택적, 미지정 시 기본값 유지) ──
  *     theme:    { primaryColor:'#1e6fff', saveColor:'#16a34a', historyColor:'#7c3aed', logoUrl:'/logo.svg', cssVars:{ '--radius-md':'10px' } },
  *     tools:    { enabled:['pen','highlighter','text','shape'], defaultTool:'pen', defaultColor:'#e8a045', defaultWidth:4,
- *                 features:{ save:true, history:true, thumbnails:true, zoom:true, orientation:true, undoRedo:true, pageNav:true } },
+ *                 features:{ save:true, history:true, thumbnails:true, bookmarks:true, zoom:true, orientation:true, undoRedo:true, pageNav:true } },
  *     locale:   'en',                            // 내장: 'ko'(기본) · 'en'. 그 외 언어는 messages로
  *     messages: { 'tool.pen':'Stylo' },          // 키별 UI 문구 오버라이드(커스텀 언어·문구)
  *   });
