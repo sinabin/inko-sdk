@@ -16,6 +16,17 @@ project license and is not a public-release approval.
 - Content boundary: synthetic NextH copy only; no customer, government, partner,
   personal, or third-party document content
 
+## Source-owned native feature PDF
+
+- File: `public/samples/inko-feature-surface.pdf`
+- Generator: `scripts/fixtures/generate-pdf-feature-surface.py`
+- SHA-256: `BA4C241F893CE938481C69C62204ABA5EB67333B52F8DD0D281BFB383070561C`
+- Properties checked: 8 pages, deterministic literal tokens for selection and
+  offscreen search, one native text annotation, safe internal/external links,
+  and synthetic text/check-box/drop-down AcroForm fields
+- Content boundary: generated test labels and geometry only; no customer,
+  government, partner, personal, or third-party document content
+
 ## Liberation Sans
 
 - Upstream: `liberationfonts/liberation-fonts` official 2.1.5 TTF release
@@ -47,9 +58,19 @@ did not match the copied OFL notice.
 - Adobe CMaps and `cmaps/LICENSE`: copied from the locked package and checked
   byte-for-byte by `scripts/check-oss-boundary.mjs`
 
+## PDF.js annotation icons
+
+- Files: `public/pdfjs-images/annotation-*.svg`
+- Version source: installed, locked `pdfjs-dist` 5.4.624 package
+- License: Apache-2.0, preserved at
+  `public/pdfjs-images/LICENSE.pdfjs-dist`
+- Integrity: all 11 SVG files and the license are copied byte-for-byte; hashes
+  are recorded in `public/pdfjs-images/manifest.json` and checked by
+  `scripts/check-oss-boundary.mjs`
+
 ## Verification rule
 
-`npm run build` fails if the synthetic fixture is missing, an old rights-unknown
-PDF returns, the approved Liberation 2.1.5 hashes change, PDF.js support assets
-diverge from the locked dependency, a source map is emitted, or development mock
-code appears in the production bundle.
+`npm run build` fails if either synthetic fixture is missing, an old
+rights-unknown PDF returns, the approved Liberation 2.1.5 hashes change, PDF.js
+support assets diverge from the locked dependency, a source map is emitted, or
+development mock code appears in the production bundle.

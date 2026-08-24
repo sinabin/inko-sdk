@@ -1,8 +1,8 @@
 /**
  * postMessage Bridge Module
  * iframe 환경에서 부모 호스트와 postMessage 통신
- * - 수신: loadPdfBase64, loadPdfFromUrl, loadUserCanvasData, saveCanvas, clearCurrentCanvas
- * - 송신: viewerReady, pdfLoaded, canvasDataChanged, saveCanvasResponse, closeViewer
+ * - 수신: loadPdfBase64, loadPdfFromUrl, loadUserCanvasData, saveCanvas, exportPdf, clearCurrentCanvas
+ * - 송신: viewerReady, pdfLoaded, canvasDataChanged, saveCanvasResponse, exportPdfResponse, closeViewer
  */
 import { reportError, reportWarning } from '../utils/errorReporter.svelte'
 
@@ -13,6 +13,7 @@ const MESSAGE_TYPES = Object.freeze({
   LOAD_PDF_FROM_URL: 'loadPdfFromUrl',
   LOAD_USER_CANVAS_DATA: 'loadUserCanvasData',
   SAVE_CANVAS: 'saveCanvas',
+  EXPORT_PDF: 'exportPdf',
   CLEAR_CURRENT_CANVAS: 'clearCurrentCanvas',
   APPLY_CONFIG: 'applyConfig',
 
@@ -21,37 +22,46 @@ const MESSAGE_TYPES = Object.freeze({
   PDF_LOADED: 'pdfLoaded',
   CANVAS_DATA_CHANGED: 'canvasDataChanged',
   SAVE_CANVAS_RESPONSE: 'saveCanvasResponse',
+  EXPORT_PDF_RESPONSE: 'exportPdfResponse',
   CLOSE_VIEWER: 'closeViewer',
   SET_ORIENTATION: 'setOrientation'
 })
 
 // ========== Origin 화이트리스트 ==========
-// 기본값: APP LocalWebServer (운영) — 빌드타임 VITE_ALLOWED_ORIGINS 환경변수로 추가 가능
-// DEV 모드에서는 vite dev server origin도 자동 허용
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://127.0.0.1:8080',
-  'http://localhost:8080'
-]
+// 기본값은 same-origin만 허용. 교차 origin 호스트는 빌드타임 환경변수로 명시
+/**
+ * viewerReady를 전송할 안전한 target origin 목록.
+ * same-origin은 항상 포함하고, cross-origin은 빌드 설정에 명시된 HTTP(S) origin만 포함한다.
+ */
+export function getViewerReadyTargetOrigins(
+  currentOrigin = window.location.origin,
+  envRaw = (import.meta.env.VITE_ALLOWED_ORIGINS as string | undefined) || ''
+): string[] {
+  const candidates = [
+    currentOrigin,
+    ...envRaw.split(',').map(value => value.trim()).filter(Boolean)
+  ]
 
-const DEV_ALLOWED_ORIGINS = [
-  'http://127.0.0.1:5173',
-  'http://localhost:5173'
-]
-
-/** 콤마 구분 origin 목록을 set으로 변환 */
-function buildAllowedOrigins(): Set<string> {
-  const envRaw = (import.meta.env.VITE_ALLOWED_ORIGINS as string | undefined) || ''
-  const fromEnv = envRaw.split(',').map(s => s.trim()).filter(Boolean)
-  const dev = import.meta.env.MODE === 'development' ? DEV_ALLOWED_ORIGINS : []
-  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv, ...dev])
+  const origins = new Set<string>()
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') continue
+      if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) continue
+      origins.add(url.origin)
+    } catch {
+      // 잘못된 설정값은 신뢰 목록에 포함하지 않는다.
+    }
+  }
+  return [...origins]
 }
 
-const ALLOWED_ORIGINS = buildAllowedOrigins()
+const VIEWER_READY_TARGET_ORIGINS = getViewerReadyTargetOrigins()
+const ALLOWED_ORIGINS = new Set(VIEWER_READY_TARGET_ORIGINS)
 
-/** same-origin 또는 화이트리스트 origin 여부 — same-origin은 브라우저가 보장하므로 항상 허용 */
-function isAllowedOrigin(origin: string): boolean {
-  if (origin === window.location.origin) return true
-  return ALLOWED_ORIGINS.has(origin)
+/** 초기화 시 확정된 정확한 HTTP(S) origin 목록에 포함되는지 확인 */
+function isAllowedOrigin(origin: string, allowedOrigins: ReadonlySet<string>): boolean {
+  return allowedOrigins.has(origin)
 }
 
 // 첫 유효 메시지 수신 시 확정되는 부모 origin — 이후 송신 targetOrigin 및 origin 일치 검증에 사용
@@ -62,6 +72,7 @@ let trustedParentOrigin: string | null = null
 const MAX_BASE64_LENGTH = 350_000_000  // ≈ 250MB 원본
 const MAX_URL_LENGTH = 8000
 const MAX_FILENAME_LENGTH = 1000
+const MAX_REQUEST_ID_LENGTH = 128
 
 function isOptionalString(v: unknown): v is string | undefined {
   return v === undefined || typeof v === 'string'
@@ -94,33 +105,43 @@ export interface PostMessageBridgeCallbacks {
   onLoadPdfFromUrl: (url: string, fileName: string, canvasData?: string, readOnly?: boolean) => void
   onLoadUserCanvasData: (data: any[]) => void
   onSaveCanvas: () => void
+  /** AcroForm annotationStorage를 반영한 PDF 바이너리 내보내기 */
+  onExportPdf?: (requestId: string) => void | Promise<void>
   onClearCanvas: () => void
   /** 호스트 커스터마이징 설정 적용 — { theme?, tools?, locale?, messages? } */
   onApplyConfig?: (config: Record<string, unknown>) => void
 }
 
+const INBOUND_MESSAGE_TYPES = new Set<string>([
+  MESSAGE_TYPES.LOAD_PDF_BASE64,
+  MESSAGE_TYPES.LOAD_PDF_FROM_URL,
+  MESSAGE_TYPES.LOAD_USER_CANVAS_DATA,
+  MESSAGE_TYPES.SAVE_CANVAS,
+  MESSAGE_TYPES.EXPORT_PDF,
+  MESSAGE_TYPES.CLEAR_CURRENT_CANVAS,
+  MESSAGE_TYPES.APPLY_CONFIG
+])
+
 // ========== 부모로 메시지 송신 ==========
 /**
  * 부모창으로 메시지 송신
  * @param message 송신 페이로드
- * @param allowBroadcast true면 trustedParentOrigin 미확정 시 same-origin으로 송신 허용 (handshake 메시지 전용)
  */
-function sendToParent(message: object, allowBroadcast = false): boolean {
+function sendToParent(message: object, transfer?: Transferable[]): boolean {
   if (!window.parent || window.parent === window) return false
 
-  // 신뢰 origin 미확정 + broadcast 비허용이면 데이터 누설 방지를 위해 송신 중단
-  let targetOrigin = trustedParentOrigin
-  if (!targetOrigin) {
-    if (!allowBroadcast) {
-      reportWarning('bridge', '부모 창과 아직 연결되지 않아 요청을 보낼 수 없습니다', `type=${(message as any).type}`)
-      return false
-    }
-    // broadcast 허용 메시지(viewerReady)는 same-origin으로만 송신 — 와일드카드 사용 금지
-    targetOrigin = window.location.origin
+  // 신뢰 origin이 확정되기 전에는 데이터가 포함된 메시지를 보내지 않는다.
+  if (!trustedParentOrigin) {
+    reportWarning('bridge', '부모 창과 아직 연결되지 않아 요청을 보낼 수 없습니다', `type=${(message as any).type}`)
+    return false
   }
 
   try {
-    window.parent.postMessage(message, targetOrigin)
+    if (transfer && transfer.length > 0) {
+      window.parent.postMessage(message, trustedParentOrigin, transfer)
+    } else {
+      window.parent.postMessage(message, trustedParentOrigin)
+    }
     return true
   } catch (e) {
     reportError('bridge', '부모 창으로 메시지 전송 실패', e)
@@ -128,9 +149,20 @@ function sendToParent(message: object, allowBroadcast = false): boolean {
   }
 }
 
-/** 뷰어 준비 완료 알림 — 부모 origin이 아직 확정되지 않았으므로 same-origin으로 송신 */
+/**
+ * 뷰어 준비 완료 알림.
+ * 민감 데이터가 없는 handshake만 same-origin과 명시 allowlist 각각에 전송한다.
+ * 부모가 첫 유효 요청을 보내면 그 origin으로 pinning되고 이후 데이터 송신은 그곳으로만 향한다.
+ */
 export function sendViewerReady() {
-  sendToParent({ type: MESSAGE_TYPES.VIEWER_READY }, true)
+  if (!window.parent || window.parent === window) return
+  for (const targetOrigin of VIEWER_READY_TARGET_ORIGINS) {
+    try {
+      window.parent.postMessage({ type: MESSAGE_TYPES.VIEWER_READY }, targetOrigin)
+    } catch (e) {
+      reportError('bridge', '부모 창으로 준비 메시지 전송 실패', e)
+    }
+  }
 }
 
 /** PDF 로드 완료 알림 */
@@ -153,6 +185,28 @@ export function sendSaveCanvasResponse(canvasData: string, success: boolean, mes
   })
 }
 
+/**
+ * PDF 바이너리 응답. canvasData와 혼합하지 않으며 성공 시 정확한 ArrayBuffer 하나만 transferable로 전달한다.
+ */
+export function sendExportPdfResponse(
+  requestId: string,
+  success: boolean,
+  pdfBytes?: ArrayBuffer,
+  message?: string
+): boolean {
+  if (!requestId || requestId.length > MAX_REQUEST_ID_LENGTH) return false
+  if (success && !(pdfBytes instanceof ArrayBuffer)) return false
+
+  const response = {
+    type: MESSAGE_TYPES.EXPORT_PDF_RESPONSE,
+    requestId,
+    success,
+    ...(success ? { pdfBytes } : {}),
+    message: message || ''
+  }
+  return sendToParent(response, success && pdfBytes ? [pdfBytes] : undefined)
+}
+
 /** 닫기 요청 */
 export function sendCloseRequest() {
   sendToParent({ type: MESSAGE_TYPES.CLOSE_VIEWER })
@@ -169,7 +223,10 @@ export function sendSetOrientation(orientation: 'portrait' | 'landscape') {
  * postMessage 이벤트 리스너 등록
  * @returns cleanup 함수
  */
-export function initPostMessageBridge(callbacks: PostMessageBridgeCallbacks): () => void {
+export function initPostMessageBridge(
+  callbacks: PostMessageBridgeCallbacks,
+  allowedOrigins: ReadonlySet<string> = ALLOWED_ORIGINS
+): () => void {
   function handleMessage(event: MessageEvent) {
     // 1. 페이로드 기본 검증 — 객체이고 type 문자열 보유
     if (!event.data || typeof event.data !== 'object') return
@@ -181,12 +238,18 @@ export function initPostMessageBridge(callbacks: PostMessageBridgeCallbacks): ()
     if (event.source && event.source !== window.parent) return
 
     // 3. origin 화이트리스트 검증
-    if (!isAllowedOrigin(event.origin)) {
+    if (!isAllowedOrigin(event.origin, allowedOrigins)) {
       console.warn('[PostMessageBridge] origin 거부:', event.origin)
       return
     }
 
-    // 4. 신뢰 부모 origin 확정 — 첫 메시지 origin을 이후 송신 target으로 고정
+    // 4. 알려진 요청만 pinning 후보로 사용 — 알 수 없는 메시지의 연결 선점 방지
+    if (!INBOUND_MESSAGE_TYPES.has(type)) {
+      console.log('[PostMessageBridge] Unknown message type:', type)
+      return
+    }
+
+    // 5. 신뢰 부모 origin 확정 — 첫 유효 요청 origin을 이후 송신 target으로 고정
     if (!trustedParentOrigin) {
       trustedParentOrigin = event.origin
       console.log('[PostMessageBridge] trusted parent origin:', trustedParentOrigin)
@@ -245,6 +308,20 @@ export function initPostMessageBridge(callbacks: PostMessageBridgeCallbacks): ()
         break
       }
 
+      case MESSAGE_TYPES.EXPORT_PDF: {
+        const { requestId } = payload
+        if (
+          typeof requestId !== 'string' ||
+          requestId.length === 0 ||
+          requestId.length > MAX_REQUEST_ID_LENGTH
+        ) {
+          reportWarning('parse', 'PDF 내보내기 requestId 형식이 잘못되었습니다')
+          return
+        }
+        void callbacks.onExportPdf?.(requestId)
+        break
+      }
+
       case MESSAGE_TYPES.CLEAR_CURRENT_CANVAS: {
         callbacks.onClearCanvas()
         break
@@ -259,7 +336,8 @@ export function initPostMessageBridge(callbacks: PostMessageBridgeCallbacks): ()
       }
 
       default:
-        console.log('[PostMessageBridge] Unknown message type:', type)
+        // INBOUND_MESSAGE_TYPES 검증 후에는 도달하지 않음
+        break
     }
   }
 

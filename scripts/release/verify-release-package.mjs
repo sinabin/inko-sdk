@@ -32,6 +32,9 @@ for (const required of [
   'sdk/inko-sdk.js',
   'viewer/index.html',
   'viewer/samples/inko-demo.pdf',
+  'viewer/samples/inko-feature-surface.pdf',
+  'viewer/pdfjs-images/manifest.json',
+  'viewer/pdfjs-images/LICENSE.pdfjs-dist',
 ]) {
   assert.ok(paths.includes(required), `release file missing: ${required}`)
 }

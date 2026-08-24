@@ -113,19 +113,6 @@
   // 기능 토글 — false면 숨김, 그 외(미지정 포함)는 노출
   const featureOn = (key: string): boolean => features[key] !== false
 
-  const colorPresets = [
-    '#000000', '#FF0000', '#00FF00', '#0000FF',
-    '#FFFF00', '#FF00FF', '#00FFFF', '#FFFFFF'
-  ]
-
-  const highlighterColorPresets = [
-    '#FFFF00', '#00FF00', '#FF69B4', '#87CEEB', '#FFA500'
-  ]
-
-  const widthPresets = [1, 2, 4, 6, 8, 12]
-  const highlighterWidthPresets = [12, 16, 20, 24, 32]
-  const fontSizePresets = [12, 16, 20, 24, 32, 48]
-
   /** 도구 → 시트 종류 매핑 (도형은 종류별로 분리해 헤더·미리보기 구분) */
   function getSheetKind(tool: ToolMode): 'pen' | 'highlighter' | 'rectangle' | 'circle' | 'line' | 'text' | null {
     if (tool === 'pen') return 'pen'
@@ -188,17 +175,21 @@
   }
 </script>
 
-<div class="toolbar">
+<div class="toolbar" role="toolbar" aria-label={t('toolbar.label')}>
   {#if logoUrl}
     <img class="toolbar-logo" src={logoUrl} alt="" style="height: 26px; width: auto; max-width: 140px; margin: 0 var(--space-2); flex-shrink: 0; object-fit: contain;" />
   {/if}
   <!-- Navigation Section -->
-  <div class="toolbar-section">
+  <div class="toolbar-section" role="group" aria-label={t('toolbar.navigationGroup')}>
     <button
+      type="button"
       class="btn thumbnail-toggle-btn"
       onclick={onToggleThumbnails}
       style:display={featureOn('thumbnails') ? undefined : 'none'}
       title={showThumbnails ? t('toolbar.thumbnailsHide') : t('toolbar.thumbnailsShow')}
+      aria-label={showThumbnails ? t('toolbar.thumbnailsHide') : t('toolbar.thumbnailsShow')}
+      aria-expanded={showThumbnails}
+      aria-controls="pdf-thumbnail-sidebar"
     >
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         {#if showThumbnails}
@@ -219,10 +210,12 @@
     <!-- 책갈피(PDF 내장 목차) — 목차가 있는 문서에서만 노출 -->
     {#if hasOutline && featureOn('bookmarks')}
       <button
+        type="button"
         class="btn outline-toggle-btn"
         class:active={isOutlinePanelVisible}
         onclick={onToggleOutline}
         aria-pressed={isOutlinePanelVisible}
+        aria-expanded={isOutlinePanelVisible}
         aria-controls="inko-outline-panel"
         title={isOutlinePanelVisible ? t('toolbar.bookmarksHide') : t('toolbar.bookmarksShow')}
         aria-label={isOutlinePanelVisible ? t('toolbar.bookmarksHide') : t('toolbar.bookmarksShow')}
@@ -237,11 +230,13 @@
       </button>
     {/if}
     <button
+      type="button"
       class="btn"
       onclick={handlePrevPage}
       disabled={currentPage <= 1}
       style:display={featureOn('pageNav') ? undefined : 'none'}
       title={t('toolbar.prevPage')}
+      aria-label={t('toolbar.prevPage')}
     >
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 18 9 12 15 6"/>
@@ -263,11 +258,13 @@
       <span class="page-total">{totalPages}</span>
     </span>
     <button
+      type="button"
       class="btn"
       onclick={handleNextPage}
       disabled={currentPage >= totalPages}
       style:display={featureOn('pageNav') ? undefined : 'none'}
       title={t('toolbar.nextPage')}
+      aria-label={t('toolbar.nextPage')}
     >
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="9 18 15 12 9 6"/>
@@ -277,8 +274,9 @@
 
   <!-- Undo/Redo Section (편집 모드에서만 노출) -->
   {#if !isReadOnly && featureOn('undoRedo')}
-    <div class="toolbar-section history-section">
+    <div class="toolbar-section history-section" role="group" aria-label={t('toolbar.editHistoryGroup')}>
       <button
+        type="button"
         class="btn history-action-btn"
         onclick={onUndo}
         disabled={!canUndo}
@@ -291,6 +289,7 @@
         </svg>
       </button>
       <button
+        type="button"
         class="btn history-action-btn"
         onclick={onRedo}
         disabled={!canRedo}
@@ -306,23 +305,30 @@
   {/if}
 
   <!-- Zoom Section -->
-  <div class="toolbar-section">
-    <button class="btn" onclick={onZoomOut} style:display={featureOn('zoom') ? undefined : 'none'} title={t('toolbar.zoomOut')}>
+  <div class="toolbar-section" role="group" aria-label={t('toolbar.zoomGroup')}>
+    <button type="button" class="btn" onclick={onZoomOut} style:display={featureOn('zoom') ? undefined : 'none'} title={t('toolbar.zoomOut')} aria-label={t('toolbar.zoomOut')}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
       </svg>
     </button>
-    <span class="zoom-info" style:display={featureOn('zoom') ? undefined : 'none'}>{Math.round(scale * 100)}%</span>
-    <button class="btn" onclick={onZoomIn} style:display={featureOn('zoom') ? undefined : 'none'} title={t('toolbar.zoomIn')}>
+    <output
+      class="zoom-info"
+      style:display={featureOn('zoom') ? undefined : 'none'}
+      aria-label={t('toolbar.zoomLevel', { percent: Math.round(scale * 100) })}
+      aria-live="polite"
+    >{Math.round(scale * 100)}%</output>
+    <button type="button" class="btn" onclick={onZoomIn} style:display={featureOn('zoom') ? undefined : 'none'} title={t('toolbar.zoomIn')} aria-label={t('toolbar.zoomIn')}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
       </svg>
     </button>
     <button
+      type="button"
       class="btn orientation-btn"
       onclick={onOrientationToggle}
       style:display={featureOn('orientation') ? undefined : 'none'}
       title={orientation === 'portrait' ? t('toolbar.orientationLandscape') : t('toolbar.orientationPortrait')}
+      aria-label={orientation === 'portrait' ? t('toolbar.orientationLandscape') : t('toolbar.orientationPortrait')}
     >
       {#if orientation === 'portrait'}
         <!-- 가로 보기로 전환 — 가로 화면 + 회전 화살표 -->
@@ -344,14 +350,18 @@
 
   <!-- Tools Section (hidden in read-only mode) -->
   {#if !isReadOnly}
-    <div class="toolbar-section tools">
+    <div class="toolbar-section tools" role="group" aria-label={t('toolbar.toolsGroup')}>
       {#each visibleTools as tool}
         <button
+          type="button"
           class="btn tool-btn"
           class:active={currentTool === tool.id}
           class:has-options={getSheetKind(tool.id) !== null}
           onclick={(e) => handleToolClick(tool.id, e.currentTarget as HTMLButtonElement)}
           title={t(tool.labelKey)}
+          aria-label={t(tool.labelKey)}
+          aria-pressed={currentTool === tool.id}
+          aria-haspopup={getSheetKind(tool.id) !== null ? 'dialog' : undefined}
           data-tool={tool.id}
         >
           {#if tool.id === 'select'}
@@ -413,9 +423,11 @@
       <!-- 선택 모드 삭제 버튼 -->
       {#if currentTool === 'select' && hasSelection}
         <button
+          type="button"
           class="btn delete-btn"
           onclick={onDeleteSelected}
           title={t('toolbar.deleteSelection')}
+          aria-label={t('toolbar.deleteSelection')}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"/>
@@ -431,15 +443,18 @@
   {/if}
 
   <!-- Action Section -->
-  <div class="toolbar-section actions">
+  <div class="toolbar-section actions" role="group" aria-label={t('toolbar.actionsGroup')}>
     <!-- History button (only show if there's user canvas data) -->
     {#if hasUserCanvasData && featureOn('history')}
       <button
+        type="button"
         class="btn history-btn"
         class:active={isHistoryPanelVisible}
         onclick={onToggleHistory}
         title={t('toolbar.history')}
-        aria-pressed={isHistoryPanelVisible}
+        aria-label={t('toolbar.history')}
+        aria-expanded={isHistoryPanelVisible}
+        aria-controls="user-canvas-history-panel"
       >
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.12"/>
@@ -450,7 +465,7 @@
     {/if}
 
     {#if !isReadOnly && featureOn('save')}
-      <button class="btn save-btn" onclick={onSave} title={t('toolbar.save')}>
+      <button type="button" class="btn save-btn" onclick={onSave} title={t('toolbar.save')} aria-label={t('toolbar.save')}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <!-- 디스크 본체 — 미세 fill로 무게 -->
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" fill="currentColor" fill-opacity="0.18"/>
@@ -543,10 +558,9 @@
     cursor: not-allowed;
   }
 
-  /* 마우스 클릭 후 잔존하는 브라우저 기본 :focus outline 제거.
-     키보드 사용자에게는 :focus-visible(개별 버튼별 ring)이 노출되어 a11y 유지 */
-  .btn:focus {
-    outline: none;
+  .btn:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .tool-btn {
@@ -655,6 +669,12 @@
     margin: 0;
   }
 
+  .page-input:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
   .page-divider {
     color: var(--color-text-muted);
     font-weight: var(--font-weight-regular);
@@ -671,111 +691,6 @@
     min-width: 48px;
     text-align: center;
     font-size: var(--font-size-md);
-  }
-
-  .brush-settings {
-    display: flex;
-    gap: var(--space-4);
-  }
-
-  .color-picker {
-    display: flex;
-    gap: var(--space-1_5);
-  }
-
-  /* 컬러 swatch — 원형, 활성 시 spring scale + focus ring (Linear/Arc 톤) */
-  .color-swatch {
-    width: 30px;
-    height: 30px;
-    border: 2px solid;
-    border-radius: var(--radius-full);
-    cursor: pointer;
-    padding: 0;
-    transition: transform var(--motion-fast) var(--ease-spring),
-                box-shadow var(--motion-fast) var(--ease-out);
-  }
-
-  .color-swatch:hover:not(.active) {
-    transform: scale(1.08);
-  }
-
-  .color-swatch.active {
-    transform: scale(1.18);
-    box-shadow: var(--shadow-focus-ring);
-  }
-
-  .width-picker {
-    display: flex;
-    gap: var(--space-1_5);
-    align-items: center;
-  }
-
-  .width-btn {
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .width-btn.active {
-    background: var(--color-primary-bg);
-    border-color: var(--color-primary);
-  }
-
-  /* 굵기 가로 막대 — 두께 차이를 시각적으로 표현 */
-  .width-bar {
-    width: 18px;
-    background: var(--color-text-primary);
-    border-radius: var(--radius-full);
-    transition: height var(--motion-fast) var(--ease-out);
-  }
-
-  .width-btn.active .width-bar {
-    background: var(--color-primary);
-  }
-
-  .font-size-picker {
-    display: flex;
-    gap: var(--space-1_5);
-    align-items: center;
-  }
-
-  .picker-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    margin-right: var(--space-0_5);
-  }
-
-  .font-size-btn {
-    min-width: 40px;
-    height: 40px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 var(--space-1);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-  }
-
-  .font-size-btn.active {
-    background: var(--color-primary-bg);
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-    font-weight: var(--font-weight-bold);
-  }
-
-  .font-size-btn:hover:not(.active) {
-    background: var(--color-surface-muted);
   }
 
   .actions {
@@ -855,7 +770,7 @@
     /* fallback — 솔리드 green pill */
     background: var(--color-action-save);
     border-color: var(--color-action-save);
-    color: var(--color-text-inverse);
+    color: var(--color-text-primary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -902,7 +817,8 @@
   }
 
   .save-btn:focus-visible {
-    outline: none;
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
     box-shadow: var(--shadow-save-action-hover), 0 0 0 3px rgba(82, 196, 26, 0.35);
   }
 
@@ -959,31 +875,6 @@
     .zoom-info {
       min-width: 40px;
       font-size: var(--font-size-sm);
-    }
-    .color-swatch {
-      width: 28px;
-      height: 28px;
-    }
-    .color-picker {
-      gap: var(--space-1);
-    }
-    .width-btn {
-      width: 32px;
-      height: 32px;
-    }
-    .width-picker {
-      gap: var(--space-1);
-    }
-    .font-size-btn {
-      min-width: 32px;
-      height: 32px;
-      font-size: 11px;
-    }
-    .font-size-picker {
-      gap: var(--space-1);
-    }
-    .brush-settings {
-      gap: var(--space-2_5);
     }
     .history-btn,
     .delete-btn,

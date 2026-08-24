@@ -33,13 +33,15 @@ function createDocument(id: string, numPages = 1) {
     numPages,
     destroy: vi.fn().mockResolvedValue(undefined),
     getPage: vi.fn(),
-    getData: vi.fn()
+    getData: vi.fn(),
+    saveDocument: vi.fn()
   }
 }
 
 beforeEach(() => {
   pdfJsMock.getDocument.mockReset()
 })
+
 describe('PdfLoader 비동기 수명주기', () => {
   it('뒤늦게 끝난 이전 load가 최신 document/loading 상태를 덮지 않는다', async () => {
     const firstResult = deferred<ReturnType<typeof createDocument>>()
@@ -127,5 +129,22 @@ describe('PdfLoader 비동기 수명주기', () => {
     expect(staleDocument.destroy).toHaveBeenCalledTimes(1)
     expect(loader.document).toBeNull()
     expect(loader.error).toBeNull()
+  })
+
+  it('exportPdf가 saveDocument의 정확한 view 범위만 독립 ArrayBuffer로 반환한다', async () => {
+    const loadedDocument = createDocument('forms')
+    const backing = new Uint8Array([0, 0x25, 0x50, 0x44, 0x46, 0])
+    loadedDocument.saveDocument.mockResolvedValue(backing.subarray(1, 5))
+    pdfJsMock.getDocument.mockReturnValueOnce(createTask(Promise.resolve(loadedDocument)))
+
+    const loader = createPdfLoader()
+    await expect(loader.loadFromUrl('/forms.pdf')).resolves.toBe(true)
+    const exported = await loader.exportPdf()
+
+    expect(loadedDocument.saveDocument).toHaveBeenCalledTimes(1)
+    expect(exported).toBeInstanceOf(ArrayBuffer)
+    expect(exported?.byteLength).toBe(4)
+    expect(Array.from(new Uint8Array(exported!))).toEqual([0x25, 0x50, 0x44, 0x46])
+    expect(exported).not.toBe(backing.buffer)
   })
 })

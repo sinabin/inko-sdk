@@ -13,6 +13,7 @@ playwright-report/
 coverage/
 blob-report/
 .vite/
+tmp/
 # Playwright outputs (regenerated each run)
 tests/e2e/.results/
 tests/e2e/report/
@@ -24,6 +25,12 @@ tests/e2e/screenshots/
 
 # Local Claude settings
 .claude/settings.local.json
+
+# Environment overrides (may contain deployment origins or secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # OS
 .DS_Store

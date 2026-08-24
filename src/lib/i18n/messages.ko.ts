@@ -12,6 +12,12 @@ export const ko: Record<string, string> = {
   'tool.text': '텍스트',
 
   // 툴바
+  'toolbar.label': 'PDF 도구 모음',
+  'toolbar.navigationGroup': '페이지 탐색',
+  'toolbar.editHistoryGroup': '실행 취소 및 다시 실행',
+  'toolbar.zoomGroup': '보기 및 확대/축소',
+  'toolbar.toolsGroup': '주석 도구',
+  'toolbar.actionsGroup': '문서 작업',
   'toolbar.thumbnailsHide': '썸네일 숨기기',
   'toolbar.thumbnailsShow': '썸네일 표시',
   'toolbar.prevPage': '이전 페이지',
@@ -21,6 +27,7 @@ export const ko: Record<string, string> = {
   'toolbar.redo': '다시 실행',
   'toolbar.zoomOut': '축소',
   'toolbar.zoomIn': '확대',
+  'toolbar.zoomLevel': '확대/축소 {percent}%',
   'toolbar.orientationLandscape': '가로 보기',
   'toolbar.orientationPortrait': '세로 보기',
   'toolbar.deleteSelection': '선택 삭제',
@@ -50,11 +57,19 @@ export const ko: Record<string, string> = {
   'history.unknownUser': '알 수 없음',
   'history.hideUser': '{name} 숨기기',
   'history.showUser': '{name} 보이기',
+  'history.close': '작업 이력 닫기',
+  'history.layerVisibility': '{name} 레이어 표시',
+  'history.currentVersion': '현재 편집 중',
+  'history.continueEditLabel': '{name}의 {date} 버전에서 이어서 편집',
 
   // 공통
   'common.cancel': '취소',
   'common.confirm': '확인',
+  'common.close': '닫기',
   'common.closeNotification': '알림 닫기',
+
+  // 알림 영역
+  'error.notifications': '알림',
 
   // 도구 옵션 시트
   'sheet.color': '색상',
@@ -65,12 +80,18 @@ export const ko: Record<string, string> = {
   'sheet.customColor': '커스텀 색상',
   'sheet.customColorPick': '커스텀 색상 선택',
   'sheet.dialogLabel': '{header} 설정',
+  'sheet.closeLabel': '{header} 설정 닫기',
   'sheet.colorSwatch': '색상 {color}',
   'sheet.widthSwatch': '{label} {n}px',
   'sheet.textPreviewSample': '가나다 ABC',
 
   // 텍스트 입력
   'text.placeholder': '텍스트 입력...',
+  'text.dialogTitle': '텍스트 입력',
+  'text.inputLabel': '추가할 텍스트',
+  'text.instructions': 'Enter 키로 확인하고 Shift+Enter 키로 줄을 바꿉니다. Escape 키로 취소합니다.',
+  'text.fontSizeGroup': '글자 크기',
+  'text.fontSizeOption': '글자 크기 {size}px',
 
   // 토스트 카테고리
   'error.categoryParse': '데이터',
@@ -90,10 +111,15 @@ export const ko: Record<string, string> = {
   'viewer.encodeFailed': '저장 데이터 인코딩 실패',
 
   // 썸네일
+  'thumbnails.navigationLabel': 'PDF 페이지 썸네일',
+  'thumbnails.listLabel': '페이지 목록',
   'thumbnails.noPdf': '불러온 PDF가 없습니다',
   'thumbnails.loadingList': '썸네일 로딩 중... ({n}/{total})',
   'thumbnail.loading': '로딩 중...',
   'thumbnail.error': '오류',
   'thumbnail.pageLabel': '{n}페이지',
+  'thumbnail.currentPageLabel': '{n}페이지, 현재 페이지',
+  'thumbnail.pageLoadingLabel': '{n}페이지 썸네일 로딩 중',
+  'thumbnail.pageErrorLabel': '{n}페이지 썸네일 오류',
   'thumbnail.contextError': '2D 컨텍스트 생성 실패',
 }

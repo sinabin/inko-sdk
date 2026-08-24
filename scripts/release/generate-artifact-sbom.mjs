@@ -49,7 +49,6 @@ assert.equal(
 
 const artifactRows = parseNoticeTable(sourceNotice, 'inko-artifact-components')
 const sourceOnlyRows = parseNoticeTable(sourceNotice, 'inko-source-only-components')
-validateStrapsNotice(sourceNotice)
 validateViewerRootFile('third_party_licenses/straps-MIT.txt')
 const noticeRows = [...artifactRows, ...sourceOnlyRows]
 assert.equal(
@@ -78,12 +77,10 @@ sourceComponentIds.add(svelteComponent.id)
 
 const lockedAcornComponent = registerLockedComponent('acorn')
 const vendoredAcornComponent = registerVendoredAcorn()
-const strapsComponent = registerStrapsJs()
 const viteComponent = registerLockedComponent('vite')
 const liberationComponent = registerLiberationFonts()
 sourceComponentIds.add(lockedAcornComponent.id)
 sourceComponentIds.add(vendoredAcornComponent.id)
-sourceComponentIds.add(strapsComponent.id)
 sourceComponentIds.add(viteComponent.id)
 sourceComponentIds.add(liberationComponent.id)
 
@@ -110,8 +107,7 @@ for (const [dependency, evidence] of directEvidence) {
 const paperEvidence = directEvidence.get('paper') ?? []
 if (paperEvidence.length > 0) {
   validateAcornEvidence(paperEvidence, lockedAcornComponent, vendoredAcornComponent)
-  validateStrapsEvidence(paperEvidence, strapsComponent)
-  for (const component of [lockedAcornComponent, vendoredAcornComponent, strapsComponent]) {
+  for (const component of [lockedAcornComponent, vendoredAcornComponent]) {
     actualComponentIds.add(component.id)
     evidenceByComponent.set(component.id, paperEvidence)
   }
@@ -131,11 +127,7 @@ const sourceOnlyComponentIds = new Set(
   [...sourceComponentIds].filter((id) => !actualComponentIds.has(id)),
 )
 
-validateNoticeRows(
-  artifactRows,
-  new Set([...actualComponentIds].filter((id) => id !== strapsComponent.id)),
-  'artifact table',
-)
+validateNoticeRows(artifactRows, actualComponentIds, 'artifact')
 validateNoticeRows(sourceOnlyRows, sourceOnlyComponentIds, 'source-only')
 
 const rootRef = npmPurl(artifactPackage.name, artifactPackage.version)
@@ -169,11 +161,7 @@ const dependencies = [
         ? Object.keys(component.locked.dependencies ?? {}).map((name) => registerLockedComponent(name).id)
         : []
       if (id === registerLockedComponent('paper').id) {
-        dependencyIds.push(
-          lockedAcornComponent.id,
-          strapsComponent.id,
-          vendoredAcornComponent.id,
-        )
+        dependencyIds.push(lockedAcornComponent.id, vendoredAcornComponent.id)
       }
       return {
         ref: componentRefs.get(id),
@@ -293,44 +281,6 @@ function registerVendoredAcorn() {
   return component
 }
 
-function registerStrapsJs() {
-  const paper = lockedPackage('paper')
-  const paperPackage = readJson(resolve(root, 'node_modules/paper/package.json'))
-  assert.equal(paperPackage.version, paper.version, 'locked Paper.js package metadata version drift')
-  assert.equal(
-    paperPackage.devDependencies?.straps,
-    '^3.0.1',
-    'Paper.js Straps.js provenance version range drift',
-  )
-
-  const name = 'straps'
-  const version = '3.0.1'
-  const id = componentId(name, version)
-  const integrity = parseIntegrity(
-    'sha512-vspwaFEQcK0m3R1Cfg3CBGichEpBq5P3xYtVXDlBP37LL9z4jsoRqI1cc0ZLdXiGnLvQvwrIidTac9YMPUE/ng==',
-  )
-  const purl = npmPurl(name, version)
-  const component = {
-    id,
-    name,
-    version,
-    license: 'MIT',
-    type: 'library',
-    purl,
-    bomRef: purl,
-    provenance: `Straps.js-derived code embedded in paper@${paper.version}; `
-      + 'node_modules/paper/package.json#devDependencies.straps',
-    distribution: {
-      url: 'https://registry.npmjs.org/straps/-/straps-3.0.1.tgz',
-      algorithm: integrity.algorithm,
-      hex: integrity.hex,
-    },
-  }
-  assert.equal(componentDefinitions.has(id), false, `curated component collides with another component: ${id}`)
-  componentDefinitions.set(id, component)
-  return component
-}
-
 function registerLiberationFonts() {
   const name = 'Liberation Fonts'
   const version = '2.1.5'
@@ -382,21 +332,6 @@ function validateAcornEvidence(paths, lockedAcorn, vendoredAcorn) {
   assert.ok(
     text.includes(vendoredAcorn.version),
     `vendored Acorn version missing from Paper.js chunk: ${vendoredAcorn.version}`,
-  )
-}
-
-function validateStrapsEvidence(paths, component) {
-  const paperSource = readFileSync(resolve(root, 'node_modules/paper/dist/paper-full.js'), 'utf8')
-  assert.match(
-    paperSource,
-    /Straps\.js - Class inheritance library with support for bean-style accessors/,
-    'Straps.js attribution marker missing from locked Paper.js distribution',
-  )
-
-  const artifactText = paths.map((path) => entries.get(path).toString('utf8')).join('\n')
-  assert.ok(
-    artifactText.includes('statics|enumerable|beans|preserve'),
-    `Straps.js-derived inheritance marker missing from Paper.js chunk: ${component.id}`,
   )
 }
 
@@ -514,19 +449,6 @@ function parseNoticeTable(markdown, marker) {
     const [name, version, license, viewerLicensePath] = cells.map(stripCode)
     return { name, version, license, viewerLicensePath }
   })
-}
-
-function validateStrapsNotice(markdown) {
-  assert.match(
-    markdown,
-    /Straps\.js-derived\s+\n?code;/,
-    'Straps.js-derived code acknowledgement missing from third-party notice',
-  )
-  assert.match(
-    markdown,
-    /`third_party_licenses\/straps-MIT\.txt`/,
-    'Straps.js license path missing from third-party notice',
-  )
 }
 
 function stripCode(value) {

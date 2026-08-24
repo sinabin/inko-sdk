@@ -1,0 +1,16 @@
+{
+  "profile": "chromium-local-ci-baseline-v1",
+  "fixturePages": 120,
+  "firstPageReadyMs": 12000,
+  "allPreviewsReadyMs": 45000,
+  "scrollFrameP95Ms": 50,
+  "scrollFrameP99Ms": 100,
+  "longTaskMaxMs": 500,
+  "longTaskCount": 20,
+  "blankSampleRatio": 0.05,
+  "farPageReadyMs": 5000,
+  "mainPdfCanvasCount": 7,
+  "maxCanvasDimensionPx": 4096,
+  "maxLivePreviewBlobUrls": 120,
+  "jsHeapGrowthMiB": 64
+}

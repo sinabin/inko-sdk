@@ -28,7 +28,7 @@ export interface ViewerTheme {
   cssVars?: Record<string, string>;
 }
 
-export type ToolName = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'shape' | 'rectangle' | 'circle' | 'line';
+export type ToolName = 'select' | 'contentSelect' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'shape' | 'rectangle' | 'circle' | 'line';
 
 export interface ViewerTools {
   /** Which drawing tools to show (default: all) */
@@ -49,6 +49,8 @@ export interface ViewerTools {
      * The button only appears when the loaded document actually has an outline.
      */
     bookmarks?: boolean;
+    /** Document-wide literal text search (Ctrl/Cmd+F). */
+    search?: boolean;
     zoom?: boolean;
     orientation?: boolean;
     undoRedo?: boolean;
@@ -107,6 +109,11 @@ export interface ViewerInstance {
   loadUserCanvasOverlay(list: UserCanvasEntry[]): void;
   /** Request save — result delivered via onSave callback */
   save(): void;
+  /**
+   * Export a standalone PDF with current AcroForm values from PDF.js annotationStorage.
+   * This binary export is separate from Paper.js canvasData and does not flatten Inko drawings.
+   */
+  exportPdf(): Promise<ArrayBuffer>;
   /** Clear annotations on the current page */
   clear(): void;
   /** Apply theme / tools / locale / messages at runtime (partial update) */
@@ -130,12 +137,14 @@ export interface InkoStatic {
     LOAD_PDF_FROM_URL: 'loadPdfFromUrl';
     LOAD_USER_CANVAS: 'loadUserCanvasData';
     SAVE_CANVAS: 'saveCanvas';
+    EXPORT_PDF: 'exportPdf';
     CLEAR_CANVAS: 'clearCurrentCanvas';
     APPLY_CONFIG: 'applyConfig';
     VIEWER_READY: 'viewerReady';
     PDF_LOADED: 'pdfLoaded';
     CANVAS_CHANGED: 'canvasDataChanged';
     SAVE_RESPONSE: 'saveCanvasResponse';
+    EXPORT_PDF_RESPONSE: 'exportPdfResponse';
     CLOSE_VIEWER: 'closeViewer';
     SET_ORIENTATION: 'setOrientation';
   }>;

@@ -25,6 +25,7 @@
  *   });
  *
  *   viewer.save();                 // 캔버스 저장 요청 → onSave 콜백
+ *   const pdf = await viewer.exportPdf(); // AcroForm 값이 반영된 PDF ArrayBuffer
  *   viewer.loadPdfUrl(url, name);  // 다른 PDF로 교체
  *   viewer.loadUserCanvasOverlay(list); // isCurrent 없으면 복수 검토 레이어, 있으면 단일 선택 버전 이력
  *   viewer.clear();
@@ -49,6 +50,7 @@
     LOAD_PDF_FROM_URL:   'loadPdfFromUrl',
     LOAD_USER_CANVAS:    'loadUserCanvasData',
     SAVE_CANVAS:         'saveCanvas',
+    EXPORT_PDF:          'exportPdf',
     CLEAR_CANVAS:        'clearCurrentCanvas',
     APPLY_CONFIG:        'applyConfig',
     // iframe → SDK (수신)
@@ -56,6 +58,7 @@
     PDF_LOADED:          'pdfLoaded',
     CANVAS_CHANGED:      'canvasDataChanged',
     SAVE_RESPONSE:       'saveCanvasResponse',
+    EXPORT_PDF_RESPONSE: 'exportPdfResponse',
     CLOSE_VIEWER:        'closeViewer',
     SET_ORIENTATION:     'setOrientation',
   });
@@ -124,6 +127,28 @@
     var destroyed = false;
     var pendingQueue = [];   // viewerReady 이전에 들어온 요청
     var lastCanvasData = ''; // 가장 최근 변경된 canvasData (onChange 캐시)
+    var pendingExports = Object.create(null);
+    var exportSequence = 0;
+    var EXPORT_TIMEOUT_MS = 60000;
+
+    function nextExportRequestId() {
+      exportSequence += 1;
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return 'inko-export-' + crypto.randomUUID();
+      }
+      return 'inko-export-' + Date.now().toString(36) + '-' + exportSequence.toString(36);
+    }
+
+    function rejectPendingExports(error) {
+      var ids = Object.keys(pendingExports);
+      for (var i = 0; i < ids.length; i++) {
+        var pending = pendingExports[ids[i]];
+        if (!pending) continue;
+        clearTimeout(pending.timer);
+        pending.reject(error);
+        delete pendingExports[ids[i]];
+      }
+    }
 
     // ========== iframe 생성 ==========
     var iframe = document.createElement('iframe');
@@ -215,6 +240,23 @@
           catch (e) { onError(e); }
           break;
 
+        case MSG.EXPORT_PDF_RESPONSE:
+          var requestId = data.requestId;
+          if (typeof requestId !== 'string' || !pendingExports[requestId]) return;
+          var pending = pendingExports[requestId];
+          clearTimeout(pending.timer);
+          delete pendingExports[requestId];
+          if (!data.success) {
+            pending.reject(new Error(data.message || '[Inko SDK] PDF export failed'));
+            return;
+          }
+          if (!(data.pdfBytes instanceof ArrayBuffer)) {
+            pending.reject(new TypeError('[Inko SDK] exportPdf response must contain an ArrayBuffer'));
+            return;
+          }
+          pending.resolve(data.pdfBytes);
+          break;
+
         case MSG.CLOSE_VIEWER:
           try { onClose(); } catch (e) { onError(e); }
           break;
@@ -276,6 +318,27 @@
       },
 
       /**
+       * PDF.js AcroForm annotationStorage를 반영한 독립 PDF 바이트를 반환한다.
+       * Paper.js canvasData는 이 결과에 합성되지 않으며 save()/onSave 계약과 별개다.
+       * @returns {Promise<ArrayBuffer>}
+       */
+      exportPdf: function () {
+        if (destroyed) {
+          return Promise.reject(new Error('[Inko SDK] viewer has been destroyed'));
+        }
+        var requestId = nextExportRequestId();
+        return new Promise(function (resolve, reject) {
+          var timer = setTimeout(function () {
+            if (!pendingExports[requestId]) return;
+            delete pendingExports[requestId];
+            reject(new Error('[Inko SDK] exportPdf timed out'));
+          }, EXPORT_TIMEOUT_MS);
+          pendingExports[requestId] = { resolve: resolve, reject: reject, timer: timer };
+          send(MSG.EXPORT_PDF, { requestId: requestId });
+        });
+      },
+
+      /**
        * 런타임 커스터마이징 적용 — 부분 갱신 가능.
        * @param {{theme?:object, tools?:object, locale?:string, messages?:object}} config
        */
@@ -302,6 +365,7 @@
           iframe.parentNode.removeChild(iframe);
         }
         pendingQueue = [];
+        rejectPendingExports(new Error('[Inko SDK] viewer was destroyed before exportPdf completed'));
       },
 
       /** 준비 여부 */

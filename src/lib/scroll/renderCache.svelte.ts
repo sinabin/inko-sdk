@@ -1,7 +1,7 @@
 /**
  * Render Cache - LRU 방식 렌더 캐시
  *
- * 메모리 제한: 300MB, 100페이지 (Galaxy Tab S9 FE+ 최적화)
+ * 메모리 제한: 300MB, 페이지·스케일 조합 100개 (장시간 문서 세션의 상한)
  */
 
 export interface CacheEntry {
@@ -59,11 +59,12 @@ function getCacheKey(pageNum: number, scale: number): string {
 }
 
 export function createRenderCache(options: RenderCacheOptions = {}): RenderCache {
-  const maxMemoryBytes = (options.maxMemoryMB ?? 100) * 1024 * 1024
-  const maxPages = options.maxPages ?? 50
+  const maxMemoryBytes = Math.max(0, (options.maxMemoryMB ?? 100) * 1024 * 1024)
+  const maxPages = Math.max(0, Math.floor(options.maxPages ?? 50))
 
   let cache = $state<Map<string, CacheEntry>>(new Map())
   let currentMemory = $state(0)
+  let accessSequence = 0
 
   // Stats tracking
   let hits = 0
@@ -115,9 +116,9 @@ export function createRenderCache(options: RenderCacheOptions = {}): RenderCache
     const entry = cache.get(key)
 
     if (entry) {
-      // LRU: 접근 시 타임스탬프 업데이트
+      // Date.now() 동률을 피해 동일 틱에서도 접근 순서를 보존한다.
       const newCache = new Map(cache)
-      newCache.set(key, { ...entry, timestamp: Date.now() })
+      newCache.set(key, { ...entry, timestamp: ++accessSequence })
       cache = newCache
       hits++
       return entry.canvas
@@ -132,10 +133,18 @@ export function createRenderCache(options: RenderCacheOptions = {}): RenderCache
     const key = getCacheKey(pageNum, scale)
     const memorySize = calculateCanvasMemory(canvas)
 
+    // 단일 코드만으로 상한을 넘는 항목은 기존 캐시를 축출하지 않고 거부한다.
+    if (!Number.isFinite(memorySize) || memorySize > maxMemoryBytes || maxPages === 0) {
+      return
+    }
+
     // 기존 항목 제거
     const existing = cache.get(key)
     if (existing) {
       currentMemory -= existing.memorySize
+      const withoutExisting = new Map(cache)
+      withoutExisting.delete(key)
+      cache = withoutExisting
     }
 
     // 용량 확보
@@ -149,7 +158,7 @@ export function createRenderCache(options: RenderCacheOptions = {}): RenderCache
       canvas,
       width: canvas.width,
       height: canvas.height,
-      timestamp: Date.now(),
+      timestamp: ++accessSequence,
       memorySize
     })
     cache = newCache

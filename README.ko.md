@@ -16,6 +16,9 @@ Inko는 [NextH](https://nexth.co.kr/)가 공개합니다. 구현과 기술적 �
 ## 제공 범위
 
 - PDF.js 기반 PDF 렌더링
+- 가상화된 전체 페이지를 대상으로 하는 PDF 원문 텍스트 선택·복사와 Unicode 리터럴 검색
+- PDF.js 네이티브 주석, 안전한 내부/외부 링크, AcroForm 표시·입력
+- 현재 AcroForm 값이 반영된 `ArrayBuffer`를 반환하는 `exportPdf()`
 - 펜·형광펜·지우개·텍스트·도형·선택·줌·썸네일 도구
 - PDF에 내장된 목차를 읽어 보여주는 책갈피 패널 (목차가 있는 문서에서만 노출)
 - `canvasData`를 통한 편집 상태 반환과 복원
@@ -23,6 +26,11 @@ Inko는 [NextH](https://nexth.co.kr/)가 공개합니다. 구현과 기술적 �
 - 항목 하나에 `isCurrent: true`를 지정하는 단일 선택 버전 이력
 - `Inko.mount()` 기반 브라우저·iframe SDK
 - 테마·도구·한국어/영어 UI 설정
+
+뷰어는 PDF.js 공개 `TextLayerBuilder`·`AnnotationLayerBuilder`와 문서 단위
+`annotationStorage`를 사용하고, 고해상도 캔버스와 DOM 레이어를 같은 logical
+viewport에 맞추며 화면 밖 페이지를 가상화합니다. 상용 PDF 연동에서 요구되는
+렌더링·텍스트·양식 상태·수명주기 문제를 검증 가능한 OSS 코드로 구현했습니다.
 
 Inko는 서버 저장소, 인증·권한, 버전 번호, append-only 저장 정책, 백업,
 보존, 감사 로그, Git의 diff·merge·branch 기능, 협업 백엔드를 제공하지
@@ -64,8 +72,16 @@ cp node_modules/inko-pdf-sdk/sdk/inko-sdk.js public/inko-sdk.js
       console.error(error)
     },
   })
+
+  // 별도 바이너리 경로: 네이티브 AcroForm 값을 PDF 바이트에 기록합니다.
+  const pdfBytes = await viewer.exportPdf()
 </script>
 ```
+
+`canvasData`와 `exportPdf()`는 의도적으로 분리된 계약입니다. `canvasData`는
+Inko의 Paper.js 그림·검토 상태를 편집 가능한 형태로 보존하고,
+`exportPdf()`는 PDF.js `saveDocument()`가 만든 네이티브 AcroForm 포함 PDF
+바이트를 반환합니다. Inko 그림을 PDF에 flatten하거나 합성하지 않습니다.
 
 cross-origin iframe으로 배포하려면 빌드 시 `VITE_ALLOWED_ORIGINS`를
 설정하고 호스트 환경에 필요한 CSP·CORS HTTP 헤더를 적용해야 합니다.

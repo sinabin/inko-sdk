@@ -43,6 +43,13 @@ export function createPdfLoader() {
 
   const hasDocument = $derived(document !== null)
 
+  /** Uint8Array view의 offset/length만 담은 독립 ArrayBuffer 생성 */
+  function toExactArrayBuffer(data: Uint8Array): ArrayBuffer {
+    const copy = new Uint8Array(data.byteLength)
+    copy.set(data)
+    return copy.buffer
+  }
+
   /**
    * 파일명 안전 디코드 — URL/외부 시스템에서 받은 percent-encoded 문자열을 사람이 읽을 수 있게 복원.
    * - URL의 query string(`?token=xyz`)·hash(`#section`)는 파일명이 아니므로 strip
@@ -198,11 +205,33 @@ export function createPdfLoader() {
     try {
       const data = await currentDocument.getData()
       return generation === currentGeneration && document === currentDocument
-        ? data.buffer as ArrayBuffer
+        ? toExactArrayBuffer(data)
         : null
     } catch (e) {
       if (generation === currentGeneration && document === currentDocument) {
         reportError('render', 'PDF 원본 데이터 추출에 실패했습니다', e)
+      }
+      return null
+    }
+  }
+
+  /**
+   * PDF.js annotationStorage(AcroForm 포함)를 실제 PDF 바이트에 반영해 내보낸다.
+   * Paper.js canvasData는 별도 상태 계약이며 이 바이너리에 합성하지 않는다.
+   */
+  async function exportPdf(): Promise<ArrayBuffer | null> {
+    const currentDocument = document
+    const currentGeneration = generation
+    if (!currentDocument) return null
+
+    try {
+      const data = await currentDocument.saveDocument()
+      return generation === currentGeneration && document === currentDocument
+        ? toExactArrayBuffer(data)
+        : null
+    } catch (e) {
+      if (generation === currentGeneration && document === currentDocument) {
+        reportError('render', 'PDF 양식 데이터를 내보내지 못했습니다', e)
       }
       return null
     }
@@ -238,6 +267,7 @@ export function createPdfLoader() {
     loadFromArrayBuffer,
     getPage,
     getDataAsArrayBuffer,
+    exportPdf,
     unload
   }
 }

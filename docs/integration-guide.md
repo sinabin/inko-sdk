@@ -51,7 +51,7 @@ PDF 로드가 차단될 수 있습니다.
 | `width`, `height` | `string` | 생성되는 iframe 크기 |
 | `iframeAttributes` | `object` | iframe에 추가할 속성 |
 | `theme` | `object` | 색상·로고·CSS 변수 설정 |
-| `tools` | `object` | 도구와 툴바 기능 설정 (`features.bookmarks`로 책갈피 패널 노출 제어) |
+| `tools` | `object` | 도구와 툴바 기능 설정 (`features.bookmarks`, `features.search`로 부가 UI 제어) |
 | `locale` | `string` | `ko` 또는 `en` |
 | `messages` | `object` | UI 문구의 키별 재정의 |
 | `onReady` | `function` | SDK와 뷰어 연결 완료 |
@@ -71,6 +71,7 @@ viewer.loadPdfUrl(url, fileName?, canvasData?, readOnly?)
 viewer.loadPdfBase64(base64, fileName?, canvasData?, readOnly?)
 viewer.loadUserCanvasOverlay(entries)
 viewer.save()
+const pdfBytes = await viewer.exportPdf()
 viewer.clear()
 viewer.applyConfig(config)
 viewer.getLastCanvasData()
@@ -78,6 +79,54 @@ viewer.destroy()
 viewer.isReady()
 viewer.iframe
 ```
+
+## PDF 원문 텍스트·검색·네이티브 주석
+
+- 읽기 전용 모드 또는 **내용 선택**(`contentSelect`) 도구에서는 PDF.js
+  TextLayer를 통해 원문 텍스트를 선택하고 복사할 수 있습니다.
+- `Ctrl+F`/`Cmd+F`는 전체 문서를 Unicode 리터럴로 검색합니다. 화면 밖 페이지도
+  인덱싱하며 다음·이전 이동은 문서 끝에서 순환합니다.
+- PDF 자체의 링크와 주석은 PDF.js AnnotationLayer로 표시합니다. 내부 목적지는
+  가상화된 대상 페이지를 준비한 뒤 이동하고, 외부 링크는 PDF.js가 허용하는
+  `http`·`https`·`ftp`·`mailto`·`tel` 스킴만 새 창으로 열며
+  `noopener noreferrer`를 적용합니다.
+- 편집 모드에서는 AcroForm 입력을 문서 단위 `annotationStorage`에 보존하므로
+  화면 밖으로 언로드된 페이지를 다시 방문해도 현재 값이 유지됩니다. `readOnly`
+  모드에서는 폼 입력 컨트롤을 제공하지 않습니다.
+
+검색 UI는 다음처럼 숨길 수 있습니다.
+
+```javascript
+Inko.mount('#viewer', {
+  src: '/inko/viewer/index.html',
+  pdfUrl: '/files/manual.pdf',
+  tools: { features: { search: false } },
+})
+```
+
+## `canvasData` 저장과 PDF 바이너리 내보내기
+
+두 경로는 서로 다른 데이터를 다루며 혼합되지 않습니다.
+
+| 경로 | 반환값 | 포함 범위 |
+| --- | --- | --- |
+| `save()` / `onSave` | 불투명 `canvasData` 문자열 | Inko Paper.js 그림·검토 상태. 다시 편집 가능 |
+| `await exportPdf()` | `Promise<ArrayBuffer>` | PDF.js `saveDocument()` 결과. 현재 네이티브 AcroForm 값 포함 |
+
+```javascript
+const pdfBytes = await viewer.exportPdf()
+await fetch('/api/documents/report.pdf', {
+  method: 'PUT',
+  headers: { 'content-type': 'application/pdf' },
+  body: pdfBytes,
+})
+```
+
+`exportPdf()`는 Inko의 펜·형광펜·텍스트·도형 `canvasData`를 PDF 페이지에
+flatten하거나 합성하지 않습니다. 네이티브 양식 값과 Inko 편집 상태를 모두
+보존하려면 호스트 앱이 PDF 바이트와 `canvasData`를 각각 저장해야 합니다.
+요청은 SDK 내부 request ID로 응답과 짝지어지며, 뷰어가 파기되거나 응답 시간이
+초과되면 Promise가 reject됩니다.
 
 `clear()`는 현재 페이지의 편집 상태만 지웁니다. 전체 문서를 초기화하려면 각
 페이지에 대해 호스트 UI에서 명시적인 흐름을 제공하거나 새 빈 상태로 문서를

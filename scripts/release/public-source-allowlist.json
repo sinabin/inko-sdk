@@ -13,6 +13,7 @@
     "package-lock.json",
     "package.json",
     "playwright.config.ts",
+    "playwright.perf.config.ts",
     "svelte.config.js",
     "tsconfig.app.json",
     "tsconfig.json",
@@ -25,6 +26,7 @@
     ".github/",
     "public/",
     "src/",
+    "tests/e2e/",
     "tests/release/",
     "tests/unit/"
   ],
@@ -33,21 +35,19 @@
     "docs/data-flow.md",
     "docs/factory-function-pattern.md",
     "docs/integration-guide.md",
+    "docs/performance.md",
     "docs/oss/asset-provenance.md",
     "scripts/block-root-package.mjs",
     "scripts/build-pkg.mjs",
     "scripts/check-csp.mjs",
     "scripts/check-oss-boundary.mjs",
-    "scripts/generate-oss-sample-pdf.py",
-    "tests/e2e/apply-config.spec.ts",
-    "tests/e2e/bookmarks.spec.ts",
-    "tests/e2e/helpers.ts",
-    "tests/e2e/sdk-roundtrip.spec.ts",
-    "tests/e2e/smoke.spec.ts",
-    "tests/e2e/version-history-mode.spec.ts"
+    "scripts/generate-oss-sample-pdf.py"
   ],
   "additionalPrefixes": [
-    "scripts/release/"
+    "scripts/release/",
+    "scripts/fixtures/",
+    "scripts/perf/",
+    "tests/perf/"
   ],
   "excludeFiles": [
     "src/lib/bridge/androidBridge.ts",

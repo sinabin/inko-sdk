@@ -1,4 +1,4 @@
-/** 디바이스 성능 감지 및 최적 설정 자동 결정 (Galaxy Tab S9 FE+ 기준) */
+/** 디바이스 성능 감지 및 렌더 설정 자동 결정 */
 
 export interface DeviceConfig {
   maxRenderedPages: number // 최대 동시 렌더링 페이지 수

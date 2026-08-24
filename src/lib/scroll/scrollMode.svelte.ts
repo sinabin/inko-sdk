@@ -1,6 +1,6 @@
 /** 스크롤 모드 오케스트레이션 — 렌더 큐 관리(최대 3개 동시), 빠른 스크롤 감지(1500px/s)로 렌더링 중지 */
 
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
+import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from 'pdfjs-dist'
 import { createVisibilityManager, type VisibleRange, type VisibilityManager } from './visibilityManager.svelte'
 import { createPageStateManager, type PageStateManager } from './pageStateManager.svelte'
 import { createRenderCache, type RenderCache } from './renderCache.svelte'
@@ -36,6 +36,7 @@ export interface ScrollMode {
   triggerInitialRender: () => void
 
   handleScaleChange: (newScale: number) => void
+  updateTotalPages: (totalPages: number) => void
 
   readonly visibilityManager: VisibilityManager | null
   readonly pageStateManager: PageStateManager
@@ -49,8 +50,10 @@ const DEFAULT_FAST_SCROLL_THRESHOLD = 1.5  // px/ms = 1500px/s
 const SCROLL_IDLE_DELAY = 150  // ms
 
 // 고해상도 렌더 상수
-const MAX_RENDER_DPR = 2.5    // 기기 DPR 상한 (메모리·성능 보호)
-const MAX_CANVAS_DIM = 4096   // 백버퍼 한 변 최대 픽셀 (모바일 캔버스 크기 한계 대비)
+export const MAX_RENDER_DPR = 2.5    // 기기 DPR 상한 (메모리·성능 보호)
+export const MAX_CANVAS_DIM = 4096   // 백버퍼 한 변 최대 픽셀 (모바일 캔버스 크기 한계 대비)
+/** pdfjs-dist 5.4.624 public AnnotationMode.ENABLE_FORMS 값. orchestration unit은 core DOM runtime을 import하지 않는다. */
+export const PDFJS_ANNOTATION_MODE_ENABLE_FORMS = 2
 
 /**
  * 페이지를 그릴 오버샘플링 배수(DPR) 계산.
@@ -58,12 +61,34 @@ const MAX_CANVAS_DIM = 4096   // 백버퍼 한 변 최대 픽셀 (모바일 캔�
  * @param cssW CSS 픽셀 기준 페이지 가로 (= viewport.width at viewportScale)
  * @param cssH CSS 픽셀 기준 페이지 세로
  */
-function computeRenderDpr(cssW: number, cssH: number): number {
-  const want = Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR)
-  const longest = Math.max(cssW, cssH)
-  if (longest <= 0) return want
-  if (longest * want <= MAX_CANVAS_DIM) return want
-  return Math.max(1, MAX_CANVAS_DIM / longest)  // 한계 초과 시 1배 밑으로는 내리지 않음
+export function computeRenderDpr(
+  cssW: number,
+  cssH: number,
+  deviceDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
+): number {
+  const normalizedDpr = Number.isFinite(deviceDpr) && deviceDpr > 0 ? deviceDpr : 1
+  const want = Math.min(normalizedDpr, MAX_RENDER_DPR)
+
+  if (!Number.isFinite(cssW) || !Number.isFinite(cssH) || cssW <= 0 || cssH <= 0) {
+    return want
+  }
+
+  // CSS 크기 자체가 4096px을 넘는 경우에는 1배 미만까지 낮춰야
+  // 실제 백버퍼의 모든 변을 정책 상한 안에 두는 것이 가능하다.
+  const dimensionLimit = Math.min(MAX_CANVAS_DIM / cssW, MAX_CANVAS_DIM / cssH)
+  return Math.min(want, dimensionLimit)
+}
+
+/**
+ * 표시 비트맵과 같은 PDF.js render 호출에서 만든 DOM-layer 메타데이터.
+ * 캐시된 canvas에도 함께 보존해 TextLayer/AnnotationLayer가 동일한 페이지,
+ * logical viewport, annotationCanvasMap을 사용하도록 한다.
+ */
+export interface PdfRenderedCanvas extends HTMLCanvasElement {
+  __renderDpr?: number
+  __pdfPage?: PDFPageProxy
+  __logicalViewport?: PageViewport
+  __annotationCanvasMap?: Map<string, HTMLCanvasElement>
 }
 
 export function createScrollMode(options: ScrollModeOptions): ScrollMode {
@@ -93,6 +118,8 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
   let activeRenders = 0
   // 진행 중 pdf.js 렌더 태스크 — 스케일 변경·가시 범위 이탈 시 취소용
   const activeRenderTasks = new Map<number, RenderTask>()
+  const scaleChangeRetryPages = new Set<number>()
+  let isDisposed = false
 
   /** 스크롤 속도 측정 및 빠른 스크롤 감지, idle 타이머로 스크롤 멈춤 후 렌더 큐 재개 */
   function handleScroll(): void {
@@ -238,14 +265,17 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       // 고해상도 렌더: 표시 크기는 viewportScale(CSS 픽셀) 그대로 두고
       // 백버퍼만 기기 DPR만큼 오버샘플링 → 레티나·모바일에서 원본급 선명도.
       // 사용한 DPR은 캔버스에 실어 보내 소비자(1.0x 기준 치수 보정)가 역산하도록 함.
-      const baseViewport = page.getViewport({ scale })
-      const dpr = computeRenderDpr(baseViewport.width, baseViewport.height)
-      const viewport = page.getViewport({ scale: scale * dpr })
+      const viewport = page.getViewport({ scale })
+      const dpr = computeRenderDpr(viewport.width, viewport.height)
 
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.floor(viewport.width)
-      canvas.height = Math.floor(viewport.height)
-      ;(canvas as any).__renderDpr = dpr
+      const canvas = document.createElement('canvas') as PdfRenderedCanvas
+      canvas.width = Math.floor(viewport.width * dpr)
+      canvas.height = Math.floor(viewport.height * dpr)
+      canvas.__renderDpr = dpr
+      canvas.__pdfPage = page
+      canvas.__logicalViewport = viewport
+      const annotationCanvasMap = new Map<string, HTMLCanvasElement>()
+      canvas.__annotationCanvasMap = annotationCanvasMap
 
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Cannot get canvas context')
@@ -253,7 +283,10 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       const renderTask = page.render({
         canvasContext: ctx,
         viewport,
-        canvas
+        canvas,
+        transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
+        annotationMode: PDFJS_ANNOTATION_MODE_ENABLE_FORMS,
+        annotationCanvasMap
       })
       activeRenderTasks.set(pageNum, renderTask)
       await renderTask.promise
@@ -261,10 +294,12 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
       // 렌더 중 스케일이 바뀐 경우 결과 폐기 — 구 스케일 비트맵의 상태·캐시 오염 방지
       if (getViewportScale() !== scale) {
+        scaleChangeRetryPages.delete(pageNum)
         pageStateManager.resetPage(pageNum)
-        if (visibilityManager?.isNearViewport(pageNum)) {
-          requestRender(pageNum)
-        }
+        // 초기 fit-width는 IntersectionObserver가 가시 범위를 확정하기 전에
+        // scale을 바꾸므로, 관측결과에 의존하면 첫 페이지가 영구히 idle이 될 수 있다.
+        // 이미 시작된 작업은 최신 scale로 한 번 재queue한다.
+        requestRender(pageNum)
         return
       }
 
@@ -272,6 +307,7 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       renderCache.set(pageNum, scale, canvas)
 
       // 상태 갱신
+      scaleChangeRetryPages.delete(pageNum)
       pageStateManager.transition(pageNum, 'rendered', scale)
       console.log(`[ScrollMode] Page ${pageNum} rendered successfully, calling onPageRendered`)
       onPageRendered(pageNum, canvas)
@@ -280,11 +316,13 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
       activeRenderTasks.delete(pageNum)
       if ((error as Error)?.name === 'RenderingCancelledException') {
         // 스케일 변경·범위 이탈로 취소됨 — idle 복원 후 가시 영역이면 재요청
+        const retryForLatestScale = scaleChangeRetryPages.delete(pageNum)
         pageStateManager.resetPage(pageNum)
-        if (visibilityManager?.isNearViewport(pageNum)) {
+        if (!isDisposed && (retryForLatestScale || visibilityManager?.isNearViewport(pageNum))) {
           requestRender(pageNum)
         }
       } else {
+        scaleChangeRetryPages.delete(pageNum)
         console.error(`[ScrollMode] Failed to render page ${pageNum}:`, error)
         pageStateManager.transitionToError(pageNum, error as Error)
       }
@@ -334,7 +372,10 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
   /** 스케일 변경 시 렌더된 페이지 중 스케일 불일치 페이지만 리셋 후 가시 범위 내 재렌더링 요청 */
   function handleScaleChange(newScale: number): void {
     // 진행 중인 구 스케일 렌더 즉시 취소 — 취소 예외 핸들러가 재요청 처리
-    activeRenderTasks.forEach(task => task.cancel())
+    activeRenderTasks.forEach((task, pageNum) => {
+      scaleChangeRetryPages.add(pageNum)
+      task.cancel()
+    })
 
     const renderedPages = pageStateManager.getRenderedPages()
 
@@ -349,8 +390,14 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
     })
   }
 
+  /** 비동기 문서 로드로 총 페이지 수가 뒤늦게 확정되는 경우 visibility 경계를 갱신한다. */
+  function updateTotalPages(totalPages: number): void {
+    visibilityManager?.updateTotalPages(Math.max(0, Math.floor(totalPages)))
+  }
+
   /** 초기화 — 스크롤 컨테이너에 VisibilityManager 생성 및 스크롤 이벤트 등록 */
   function initialize(container: HTMLElement): void {
+    isDisposed = false
     scrollContainer = container
 
     visibilityManager = createVisibilityManager({
@@ -395,6 +442,8 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
 
   /** 리소스 정리 — 진행 중 렌더, 타이머, 이벤트 리스너, 매니저, 캐시 해제 */
   function dispose(): void {
+    isDisposed = true
+    scaleChangeRetryPages.clear()
     activeRenderTasks.forEach(task => task.cancel())
     activeRenderTasks.clear()
 
@@ -426,6 +475,7 @@ export function createScrollMode(options: ScrollModeOptions): ScrollMode {
     cancelRender,
     triggerInitialRender,
     handleScaleChange,
+    updateTotalPages,
 
     get visibilityManager() { return visibilityManager },
     get pageStateManager() { return pageStateManager },

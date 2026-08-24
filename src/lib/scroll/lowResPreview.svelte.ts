@@ -16,6 +16,13 @@ const PREVIEW_SCALE = 0.15
 const BATCH_SIZE = 5 // 동시 생성 수 (브라우저 응답성 유지)
 const JPEG_QUALITY = 0.7 // JPEG 압축 품질
 
+class StalePreviewGenerationError extends Error {
+  constructor() {
+    super('폐기된 프리뷰 생성 작업')
+    this.name = 'StalePreviewGenerationError'
+  }
+}
+
 export interface LowResPreview {
   // State
   readonly isGenerating: boolean
@@ -32,11 +39,12 @@ export interface LowResPreview {
 
 export function createLowResPreview(): LowResPreview {
   // 페이지 번호 -> Blob URL 캐시
-  const previewCache: Map<number, string> = new Map()
+  let previewCache = $state<Map<number, string>>(new Map())
 
   // 프리뷰 생성 상태
   let isGenerating = $state(false)
   let generationProgress = $state(0)
+  let generationId = 0
 
   /**
    * 모든 페이지의 저해상도 프리뷰 생성
@@ -51,6 +59,7 @@ export function createLowResPreview(): LowResPreview {
       return
     }
 
+    const runId = ++generationId
     isGenerating = true
     generationProgress = 0
 
@@ -63,10 +72,14 @@ export function createLowResPreview(): LowResPreview {
         const batchEnd = Math.min(i + BATCH_SIZE, numPages)
         const batch = Array.from(
           { length: batchEnd - i },
-          (_, j) => generateSinglePreview(pdfDoc, i + j + 1)
+          (_, j) => generateSinglePreviewForGeneration(pdfDoc, i + j + 1, runId)
         )
 
         await Promise.all(batch)
+
+        if (runId !== generationId) {
+          throw new StalePreviewGenerationError()
+        }
 
         // 진행률 업데이트
         generationProgress = Math.round((batchEnd / numPages) * 100)
@@ -78,10 +91,15 @@ export function createLowResPreview(): LowResPreview {
 
       console.log('[LowResPreview] 모든 프리뷰 생성 완료')
     } catch (err) {
-      console.error('[LowResPreview] 프리뷰 생성 실패:', err)
+      if (!(err instanceof StalePreviewGenerationError) && runId === generationId) {
+        console.error('[LowResPreview] 프리뷰 생성 실패:', err)
+      }
     } finally {
-      isGenerating = false
-      generationProgress = 100
+      // clearPreviews() 이후 시작한 새 작업의 상태를 예전 작업이 덮어쓰지 않는다.
+      if (runId === generationId) {
+        isGenerating = false
+        generationProgress = 100
+      }
     }
   }
 
@@ -92,17 +110,38 @@ export function createLowResPreview(): LowResPreview {
     pdfDoc: PDFDocumentProxy,
     pageNum: number
   ): Promise<string> {
+    try {
+      return await generateSinglePreviewForGeneration(pdfDoc, pageNum, generationId)
+    } catch (err) {
+      if (!(err instanceof StalePreviewGenerationError)) {
+        console.warn(`[LowResPreview] 페이지 ${pageNum} 프리뷰 생성 실패:`, err)
+      }
+      throw err
+    }
+  }
+
+  async function generateSinglePreviewForGeneration(
+    pdfDoc: PDFDocumentProxy,
+    pageNum: number,
+    runId: number
+  ): Promise<string> {
+    if (runId !== generationId) {
+      throw new StalePreviewGenerationError()
+    }
+
     // 이미 캐시에 있으면 반환
     if (previewCache.has(pageNum)) {
       return previewCache.get(pageNum)!
     }
+
+    let canvas: HTMLCanvasElement | null = null
 
     try {
       const page = await pdfDoc.getPage(pageNum)
       const viewport = page.getViewport({ scale: PREVIEW_SCALE })
 
       // 오프스크린 캔버스 생성
-      const canvas = document.createElement('canvas')
+      canvas = document.createElement('canvas')
       canvas.width = viewport.width
       canvas.height = viewport.height
 
@@ -120,7 +159,7 @@ export function createLowResPreview(): LowResPreview {
 
       // JPEG Blob으로 변환 후 URL 생성
       const blobUrl = await new Promise<string>((resolve, reject) => {
-        canvas.toBlob(
+        canvas!.toBlob(
           (blob) => {
             if (blob) {
               resolve(URL.createObjectURL(blob))
@@ -133,17 +172,30 @@ export function createLowResPreview(): LowResPreview {
         )
       })
 
-      // 캐시에 저장
-      previewCache.set(pageNum, blobUrl)
+      if (runId !== generationId) {
+        URL.revokeObjectURL(blobUrl)
+        throw new StalePreviewGenerationError()
+      }
 
-      // 캔버스 메모리 해제
-      canvas.width = 1
-      canvas.height = 1
+      // 같은 페이지의 경쟁 생성이 있었다면 후발 URL을 즉시 회수한다.
+      const existing = previewCache.get(pageNum)
+      if (existing) {
+        URL.revokeObjectURL(blobUrl)
+        return existing
+      }
+
+      // 캐시에 저장
+      const nextCache = new Map(previewCache)
+      nextCache.set(pageNum, blobUrl)
+      previewCache = nextCache
 
       return blobUrl
-    } catch (err) {
-      console.warn(`[LowResPreview] 페이지 ${pageNum} 프리뷰 생성 실패:`, err)
-      throw err
+    } finally {
+      if (canvas) {
+        // 캔버스 메모리 해제
+        canvas.width = 1
+        canvas.height = 1
+      }
     }
   }
 
@@ -165,8 +217,10 @@ export function createLowResPreview(): LowResPreview {
    * 모든 프리뷰 정리 (메모리 해제)
    */
   function clearPreviews(): void {
+    generationId++
+    isGenerating = false
     previewCache.forEach((url) => URL.revokeObjectURL(url))
-    previewCache.clear()
+    previewCache = new Map()
     generationProgress = 0
     console.log('[LowResPreview] 프리뷰 캐시 정리 완료')
   }

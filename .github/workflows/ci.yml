@@ -38,7 +38,7 @@ jobs:
           PUBLIC_EXPORT="$RUNNER_TEMP/inko-public-source"
           test ! -e "$PUBLIC_EXPORT"
           node scripts/release/export-public-source.mjs "$PUBLIC_EXPORT"
-          if [ "$GITHUB_REPOSITORY" != "sinabin/Inko" ]; then
+          if ! git ls-files --error-unmatch CLAUDE.md >/dev/null 2>&1; then
             node scripts/release/verify-public-tree.mjs
           fi
 
@@ -53,8 +53,8 @@ jobs:
           npm audit --audit-level=high
           npm audit signatures
 
-      - name: Run unit tests
-        run: npm test
+      - name: Run unit tests with coverage gates
+        run: npm run test:coverage
 
       - name: Run static checks
         run: npm run check
@@ -74,6 +74,9 @@ jobs:
 
       - name: Run browser E2E regression suite
         run: npm run test:e2e
+
+      - name: Run 120-page performance regression gate
+        run: npm run test:perf
 
       - name: Build and verify npm release candidate
         shell: bash
@@ -106,3 +109,7 @@ jobs:
             dist-second.sha256
             npm-pack-dry-run.json
             sbom.cdx.json
+            coverage/
+            test-results/performance/
+            node_modules/.cache/inko-playwright/report/
+            node_modules/.cache/inko-playwright/results/

@@ -1,0 +1,8 @@
+{
+  "version": "inko-perf-v1",
+  "pages": 120,
+  "bytes": 453771,
+  "sha256": "920473dc9560669607b913ba6cac91ab351d861fb80044d0ee313518b195acee",
+  "pageSizePoints": [612, 792],
+  "workload": "uniform Helvetica text rows, vector rules and deterministic bars; no external assets"
+}

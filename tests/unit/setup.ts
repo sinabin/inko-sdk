@@ -3,6 +3,27 @@
  */
 import { vi } from 'vitest'
 
+// pdfjs-dist의 현대 ESM 빌드는 모듈 평가 시 DOMMatrix를 생성한다.
+// jsdom에는 구현이 없으므로 렌더링을 mock하는 단위 테스트에서 쓰는 2D identity 최소 계약을 제공한다.
+if (!('DOMMatrix' in globalThis)) {
+  class DOMMatrixMock {
+    a = 1
+    b = 0
+    c = 0
+    d = 1
+    e = 0
+    f = 0
+    is2D = true
+
+    constructor(values?: number[]) {
+      if (values && values.length >= 6) {
+        ;[this.a, this.b, this.c, this.d, this.e, this.f] = values
+      }
+    }
+  }
+  ;(globalThis as any).DOMMatrix = DOMMatrixMock
+}
+
 // jsdom에 누락된 API 보강
 if (typeof window !== 'undefined') {
   // matchMedia

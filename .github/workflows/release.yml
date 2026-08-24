@@ -80,7 +80,7 @@ jobs:
 
       - name: Run unit and static checks
         run: |
-          npm test
+          npm run test:coverage
           npm run check
 
       - name: Verify reproducible production build
@@ -98,6 +98,9 @@ jobs:
 
       - name: Run browser E2E regression suite
         run: npm run test:e2e
+
+      - name: Run 120-page performance regression gate
+        run: npm run test:perf
 
       - name: Build and verify release package
         run: |
@@ -188,3 +191,4 @@ jobs:
             SHA256SUMS
             dist-first.sha256
             dist-second.sha256
+            test-results/performance/

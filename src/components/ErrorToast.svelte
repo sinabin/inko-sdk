@@ -19,20 +19,28 @@
   }
 </script>
 
-<div class="toast-stack" aria-live="polite" role="status">
+<div class="toast-stack" role="region" aria-label={t('error.notifications')}>
   {#each toasts as toast (toast.id)}
-    <button
-      type="button"
+    <div
       class="toast toast-{toast.kind}"
-      onclick={() => errorReporter.dismiss(toast.id)}
-      aria-label={t('common.closeNotification')}
+      role={toast.kind === 'error' ? 'alert' : 'status'}
+      aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
     >
       <span class="badge">{categoryKey[toast.category] ? t(categoryKey[toast.category]) : toast.category}</span>
       <span class="message">{toast.message}</span>
+      <button
+        type="button"
+        class="toast-close"
+        onclick={() => errorReporter.dismiss(toast.id)}
+        aria-label={`${t('common.closeNotification')}: ${toast.message}`}
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
       {#if toast.detail}
         <span class="detail">{toast.detail}</span>
       {/if}
-    </button>
+    </div>
   {/each}
 </div>
 
@@ -52,7 +60,7 @@
   .toast {
     pointer-events: auto;
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
     column-gap: 8px;
     row-gap: 4px;
     align-items: center;
@@ -61,7 +69,6 @@
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     text-align: left;
-    cursor: pointer;
     font-family: inherit;
     font-size: 14px;
     line-height: 1.4;
@@ -70,7 +77,24 @@
     animation: slide-in 180ms ease-out;
   }
 
-  .toast:focus-visible {
+  .toast-close {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: currentColor;
+    cursor: pointer;
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .toast-close:hover {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  .toast-close:focus-visible {
     outline: 2px solid #2563eb;
     outline-offset: 2px;
   }
@@ -119,5 +143,11 @@
   @keyframes slide-in {
     from { opacity: 0; transform: translateX(20px); }
     to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast {
+      animation: none;
+    }
   }
 </style>

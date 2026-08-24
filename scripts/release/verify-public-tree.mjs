@@ -86,15 +86,28 @@ for (const required of [
   'TRADEMARKS.md',
   'package.json',
   'package-lock.json',
+  'playwright.perf.config.ts',
   'public/THIRD_PARTY_NOTICES.md',
   'public/sdk/pdfv-sdk.js',
   'public/sdk/inko-sdk.d.ts',
   'public/samples/inko-demo.pdf',
+  'public/samples/inko-feature-surface.pdf',
+  'public/pdfjs-images/manifest.json',
+  'public/pdfjs-images/LICENSE.pdfjs-dist',
+  'docs/performance.md',
+  'scripts/fixtures/generate-pdf-feature-surface.py',
+  'scripts/perf/generate-fixture.d.mts',
+  'scripts/perf/generate-fixture.mjs',
+  'scripts/perf/serve-performance-build.mjs',
   'scripts/release/export-public-source.mjs',
   'scripts/release/generate-artifact-sbom.mjs',
   'scripts/release/verify-public-tree.mjs',
   'scripts/release/verify-release-package.mjs',
   'tests/release/verify-installed-tarball.mjs',
+  'tests/perf/budgets.json',
+  'tests/perf/fixture-manifest.json',
+  'tests/perf/host.html',
+  'tests/perf/performance-120p.spec.ts',
 ]) {
   assert.ok(paths.includes(required), `required public file missing: ${required}`)
 }
@@ -109,6 +122,16 @@ assert.match(
   'source workspace prepack guard required'
 )
 assert.doesNotMatch(JSON.stringify(packageJson.scripts ?? {}), /android:/i)
+assert.equal(
+  packageJson.scripts?.['test:e2e'],
+  'playwright test',
+  'public functional E2E must be discovered from tests/e2e instead of a filename allowlist'
+)
+assert.equal(
+  packageJson.scripts?.['test:perf'],
+  'playwright test --config playwright.perf.config.ts',
+  'public 120-page performance regression command required'
+)
 assert.match(
   JSON.stringify(packageJson.repository ?? ''),
   /github\.com[/:]sinabin\/inko-sdk(?:\.git)?/i,
@@ -118,10 +141,24 @@ const packageLock = JSON.parse(readFileSync(resolve(root, 'package-lock.json'), 
 assert.equal(packageLock.name, packageJson.name, 'package-lock root name drift')
 assert.equal(packageLock.version, packageJson.version, 'package-lock root version drift')
 assert.equal(packageLock.packages?.['']?.license, 'Apache-2.0', 'package-lock license drift')
+assert.equal(
+  packageJson.devDependencies?.['@vitest/coverage-v8'],
+  packageLock.packages?.['node_modules/@vitest/coverage-v8']?.version,
+  'coverage provider must be locked to the installed version'
+)
+
+const functionalE2eSpecs = paths.filter((path) => /^tests\/e2e\/.*\.spec\.ts$/.test(path))
+assert.ok(functionalE2eSpecs.length > 0, 'public functional E2E specs missing')
+assert.deepEqual(
+  functionalE2eSpecs.filter((path) => /(?:manual|visual|sales|evidence|local-history)/i.test(path)),
+  [],
+  'manual, visual, sales, evidence, or dev-history specs must not enter public functional E2E'
+)
 
 const scannerPath = 'scripts/release/verify-public-tree.mjs'
 const skippedPrefixes = [
   'public/cmaps/',
+  'public/pdfjs-images/',
   'public/standard_fonts/',
   'public/third_party_licenses/',
 ]

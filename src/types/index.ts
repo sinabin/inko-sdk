@@ -3,7 +3,7 @@
  */
 
 // ===== Tool Types =====
-export type ToolMode = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'line'
+export type ToolMode = 'select' | 'contentSelect' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'line'
 
 // 펜 표준 압력 가중치 — 단일 펜 스타일. drawingMode에서 사용
 export const PEN_PRESSURE_GAIN = 1.4

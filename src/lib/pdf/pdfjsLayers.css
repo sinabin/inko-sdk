@@ -1,0 +1,35 @@
+/*
+ * PDF.js 5.4.624가 런타임에 생성하는 textLayer·annotationLayer의 공식 스타일.
+ * Upstream: pdfjs-dist/web/pdf_viewer.css, Apache-2.0 (Mozilla Foundation).
+ */
+@import 'pdfjs-dist/web/pdf_viewer.css';
+
+/* PDF canvas 위, 검토본·Paper.js 편집 레이어 아래의 논리 계층 */
+.inko-text-layer {
+  z-index: var(--z-pdf-text, 11);
+}
+
+.inko-annotation-layer {
+  /* Paper.js canvas보다 위에 두되 빈 레이어 면은 포인터를 받지 않는다. */
+  z-index: var(--z-pdf-annotation, 40);
+  pointer-events: none;
+}
+
+.inko-annotation-layer section {
+  pointer-events: auto;
+}
+
+/* 상위 도구 모드가 native PDF 상호작을 잠그는 명시적 스위치 */
+.inko-text-layer.inko-native-interaction-disabled,
+.inko-annotation-layer.inko-native-interaction-disabled,
+.inko-annotation-layer.inko-native-interaction-disabled section {
+  pointer-events: none;
+}
+
+/* 강제 색상 모드에서도 폼 외곽선과 선택 표시를 유지 */
+@media (forced-colors: active) {
+  .inko-annotation-layer :is(input, textarea, select, a):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+}

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { fly, fade } from 'svelte/transition'
-  import { cubicOut } from 'svelte/easing'
+  import { tick } from 'svelte'
   import { t } from '../lib/i18n/index.svelte'
 
   /** 시트가 다루는 도구 종류 — 헤더·색상·굵기·미리보기·추가 컨트롤 분기에 사용 */
@@ -67,12 +66,77 @@
 
   let meta = $derived(TOOL_META[toolKind])
 
-  function handleBackdrop() {
-    onClose?.()
+  let dialogEl = $state<HTMLDialogElement | null>(null)
+  let closeButtonEl = $state<HTMLButtonElement | null>(null)
+  let returnFocusElement: HTMLElement | null = null
+
+  $effect(() => {
+    if (!isVisible || !dialogEl) return
+
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement
+      returnFocusElement = active instanceof HTMLElement && active !== document.body ? active : null
+    }
+    if (!dialogEl.open) {
+      if (typeof dialogEl.showModal === 'function') dialogEl.showModal()
+      else dialogEl.setAttribute('open', '')
+    }
+    tick().then(() => closeButtonEl?.focus())
+  })
+
+  function closeDialog(): void {
+    if (!dialogEl?.open) return
+    if (typeof dialogEl.close === 'function') dialogEl.close()
+    else dialogEl.removeAttribute('open')
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose?.()
+  function handleClose(): void {
+    const focusTarget = returnFocusElement?.isConnected
+      ? returnFocusElement
+      : typeof document !== 'undefined'
+        ? document.querySelector<HTMLElement>(`.tool-btn[data-tool="${toolKind}"]`)
+        : null
+    closeDialog()
+    onClose?.()
+    setTimeout(() => focusTarget?.focus(), 0)
+  }
+
+  function handleBackdrop(event: MouseEvent): void {
+    if (event.target === event.currentTarget) handleClose()
+  }
+
+  function handleDialogCancel(event: Event): void {
+    event.preventDefault()
+    handleClose()
+  }
+
+  function handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      handleClose()
+      return
+    }
+
+    if (event.key !== 'Tab' || !dialogEl) return
+    const focusable = Array.from(dialogEl.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]):not([type="hidden"]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => element.tabIndex >= 0 && !element.hasAttribute('hidden'))
+    if (focusable.length === 0) {
+      event.preventDefault()
+      dialogEl.focus()
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
   }
 
   // 미리보기 곡선 path
@@ -85,7 +149,7 @@
   }
 
   // 커스텀 색상 picker — native input[type=color] 트리거
-  let colorInputEl: HTMLInputElement
+  let colorInputEl = $state<HTMLInputElement | null>(null)
   function openCustomColorPicker() {
     colorInputEl?.click()
   }
@@ -128,25 +192,36 @@
   )
 </script>
 
-<svelte:window on:keydown={handleKeyDown} on:resize={syncViewport} />
+<svelte:window onresize={syncViewport} />
 
 {#if isVisible}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="tool-sheet-backdrop" onclick={handleBackdrop} transition:fade={{ duration: 120 }}></div>
-
-  <div
+  <dialog
+    bind:this={dialogEl}
     class="tool-sheet"
     style="left: {clampedLeft}px; top: {clampedTop}px"
-    role="dialog"
-    aria-label={t('sheet.dialogLabel', { header: t(meta.header) })}
-    transition:fly={{ y: -8, duration: 200, easing: cubicOut, opacity: 0 }}
+    aria-modal="true"
+    aria-labelledby="tool-options-heading"
+    tabindex="-1"
+    onclick={handleBackdrop}
+    onkeydown={handleKeyDown}
+    oncancel={handleDialogCancel}
   >
     <header class="tool-sheet-header">
-      <h3>{t(meta.header)}</h3>
+      <h3 id="tool-options-heading">{t('sheet.dialogLabel', { header: t(meta.header) })}</h3>
+      <button
+        bind:this={closeButtonEl}
+        type="button"
+        class="sheet-close-btn"
+        onclick={handleClose}
+        aria-label={t('sheet.closeLabel', { header: t(meta.header) })}
+        title={t('sheet.closeLabel', { header: t(meta.header) })}
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
     </header>
 
     <!-- 미리보기 — 도구 의도와 1:1 대응 (Norman 어포던스, Krug 1초 룰) -->
-    <div class="tool-preview">
+    <div class="tool-preview" aria-hidden="true">
       {#if meta.previewShape === 'text'}
         <svg viewBox="0 0 220 60" width="220" height="60">
           <text
@@ -203,10 +278,11 @@
 
     <!-- 색상 -->
     <section class="tool-section">
-      <h4 class="tool-section-label">{t('sheet.color')}</h4>
-      <div class="color-grid" style="--color-cols: {colorGridCols}">
+      <h4 id="tool-options-color-heading" class="tool-section-label">{t('sheet.color')}</h4>
+      <div class="color-grid" style="--color-cols: {colorGridCols}" role="group" aria-labelledby="tool-options-color-heading">
         {#each colorPresets as color (color)}
           <button
+            type="button"
             class="color-swatch-sheet"
             class:active={brushColor.toLowerCase() === color.toLowerCase()}
             style="background-color: {color}; border-color: {color};"
@@ -217,10 +293,12 @@
         {/each}
         {#if meta.showCustomPicker}
           <button
+            type="button"
             class="color-swatch-sheet color-picker-trigger"
             class:active={isCustomColorActive}
             onclick={openCustomColorPicker}
             aria-label={t('sheet.customColorPick')}
+            aria-pressed={isCustomColorActive}
             title={t('sheet.customColor')}
           >
             <!-- 무지개는 항상 표시 — picker임을 영구 어포던스 -->
@@ -245,10 +323,11 @@
 
     <!-- 굵기/크기 -->
     <section class="tool-section">
-      <h4 class="tool-section-label">{t(meta.sizeLabel)}</h4>
-      <div class="width-grid" style="--width-cols: {widthPresets.length}">
+      <h4 id="tool-options-size-heading" class="tool-section-label">{t(meta.sizeLabel)}</h4>
+      <div class="width-grid" style="--width-cols: {widthPresets.length}" role="group" aria-labelledby="tool-options-size-heading">
         {#each widthPresets as w (w)}
           <button
+            type="button"
             class="width-btn-sheet"
             class:active={brushWidth === w}
             onclick={() => onWidthChange?.(w)}
@@ -275,7 +354,7 @@
         <div class="slider-row">
           <div class="slider-head">
             <label for="pressure-sens-slider" class="slider-label">{t('sheet.pressure')}</label>
-            <span class="slider-value">{pressureSensitivity}%</span>
+            <output id="pressure-sens-value" class="slider-value" for="pressure-sens-slider">{pressureSensitivity}%</output>
           </div>
           <input
             id="pressure-sens-slider"
@@ -288,23 +367,23 @@
             class="slider"
             style="--progress: {pressureSensitivity}%"
             aria-label={t('sheet.pressure')}
+            aria-describedby="pressure-sens-value"
           />
         </div>
       </section>
     {/if}
-  </div>
+  </dialog>
 {/if}
 
 <style>
-  .tool-sheet-backdrop {
-    position: fixed;
-    inset: 0;
+  .tool-sheet::backdrop {
     background: transparent;
-    z-index: var(--z-sheet-backdrop);
   }
 
   .tool-sheet {
     position: fixed;
+    inset: auto;
+    margin: 0;
     z-index: var(--z-sheet);
     width: 320px;
     background: var(--color-surface);
@@ -316,6 +395,9 @@
   }
 
   .tool-sheet-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     margin-bottom: var(--space-2);
   }
 
@@ -325,6 +407,25 @@
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
     text-align: center;
+    flex: 1;
+  }
+
+  .sheet-close-btn {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--font-size-2xl);
+    line-height: 1;
+  }
+
+  .sheet-close-btn:hover {
+    background: var(--color-surface-muted);
   }
 
   .tool-preview {
@@ -453,8 +554,8 @@
 
   .width-btn-sheet.active {
     background: var(--color-primary-bg);
-    border-color: var(--color-primary);
-    color: var(--color-primary);
+    border-color: var(--color-primary-strong-hover);
+    color: var(--color-primary-strong-hover);
   }
 
   .width-stroke {
@@ -488,7 +589,7 @@
   .slider-value {
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-primary);
+    color: var(--color-primary-strong-hover);
     font-variant-numeric: tabular-nums;
     min-width: 36px;
     text-align: right;
@@ -502,8 +603,8 @@
     border-radius: var(--radius-full);
     background: linear-gradient(
       to right,
-      var(--color-primary) 0%,
-      var(--color-primary) var(--progress),
+      var(--color-primary-strong-hover) 0%,
+      var(--color-primary-strong-hover) var(--progress),
       var(--color-border-light) var(--progress),
       var(--color-border-light) 100%
     );
@@ -519,7 +620,7 @@
     height: 18px;
     border-radius: var(--radius-full);
     background: var(--color-surface);
-    border: 2px solid var(--color-primary);
+    border: 2px solid var(--color-primary-strong-hover);
     box-shadow: var(--shadow-sm);
     cursor: pointer;
     transition: transform var(--motion-fast) var(--ease-spring),
@@ -540,7 +641,7 @@
     height: 18px;
     border-radius: var(--radius-full);
     background: var(--color-surface);
-    border: 2px solid var(--color-primary);
+    border: 2px solid var(--color-primary-strong-hover);
     box-shadow: var(--shadow-sm);
     cursor: pointer;
     transition: transform var(--motion-fast) var(--ease-spring);
@@ -551,11 +652,19 @@
   }
 
   .slider:focus-visible {
-    outline: none;
+    outline: 3px solid var(--color-primary);
+    outline-offset: 4px;
   }
 
   .slider:focus-visible::-webkit-slider-thumb {
     box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.25), var(--shadow-sm);
+  }
+
+  .sheet-close-btn:focus-visible,
+  .color-swatch-sheet:focus-visible,
+  .width-btn-sheet:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   /* landscape — 시트 좁게 */

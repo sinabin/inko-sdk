@@ -24,7 +24,7 @@ function makeCallbacks(extra: Record<string, unknown> = {}) {
 function dispatch(type: string, data?: any) {
   window.dispatchEvent(new MessageEvent('message', {
     data: data === undefined ? { type } : { type, data },
-    origin: 'http://localhost:8080'
+    origin: window.location.origin
   }))
 }
 

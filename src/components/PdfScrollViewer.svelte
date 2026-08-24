@@ -1,10 +1,17 @@
 <script lang="ts">
-  import type { PDFDocumentProxy } from 'pdfjs-dist'
+  import type { PDFDocumentProxy, PDFPageProxy, PageViewport } from 'pdfjs-dist'
   import type { ToolMode, UserCanvasInfo } from '../types'
-  import { createScrollMode, type ScrollMode } from '../lib/scroll/scrollMode.svelte'
+  import {
+    createScrollMode,
+    type PdfRenderedCanvas,
+    type ScrollMode
+  } from '../lib/scroll/scrollMode.svelte'
   import { createPageCanvasManager, type PageCanvasManager } from '../lib/canvas/pageCanvasManager.svelte'
   import { createUserOverlay, type UserOverlay } from '../lib/canvas/userOverlay.svelte'
   import { createHistoryManager, type HistoryManager } from '../lib/history'
+  import { createPdfLinkService, type PdfLinkService } from '../lib/pdf/pdfLinkService'
+  import type { PdfSearchState } from '../lib/pdf/pdfSearch.svelte'
+  import PdfPageDomLayers, { type PdfPageDomLayersReady } from './PdfPageDomLayers.svelte'
   import { onMount, onDestroy, tick, untrack } from 'svelte'
 
   interface Props {
@@ -27,6 +34,8 @@
     /** 버전 이력 모드(데모 '작업 이력' 뷰어 등) — 과거 버전 미리보기 시 편집 레이어를 숨긴다.
      *  기본(다중 사용자 레이어=겹쳐 보기) 모드는 false로 두어 기존 동작 유지 */
     isVersionHistoryMode?: boolean
+    /** 전체 문서 검색 상태. 렌더된 TextLayer의 결과 강조에만 사용한다. */
+    searchState?: PdfSearchState | null
     onPageChange?: (page: number) => void
     onCanvasChange?: (pageNum: number, json: string) => void
     onTextInputRequest?: (existingText?: string) => void
@@ -51,6 +60,7 @@
     userCanvasData = [],
     currentEditCanvasId = '',
     isVersionHistoryMode = false,
+    searchState = null,
     onPageChange,
     onCanvasChange,
     onTextInputRequest,
@@ -67,6 +77,18 @@
   let pdfCanvases: Map<number, HTMLCanvasElement> = new Map()
   let paperCanvasElements: Map<number, HTMLCanvasElement> = new Map()
   let overlayContainers: Map<number, HTMLElement> = new Map()
+  let textLayerElements: Map<number, HTMLDivElement> = new Map()
+
+  interface PageDomLayerMetadata {
+    pdfPage: PDFPageProxy
+    viewport: PageViewport
+    annotationCanvasMap: Map<string, HTMLCanvasElement>
+  }
+
+  let pageDomLayerMetadata = $state<Map<number, PageDomLayerMetadata>>(new Map())
+  let linkServiceController: ReturnType<typeof createPdfLinkService> | null = null
+  let pdfLinkService: PdfLinkService | null = $state(null)
+  const pageRenderWaiters = new Map<number, Set<() => void>>()
 
   // 1.0x baseline 기준 페이지 논리 크기 (Paper.js project 좌표계 = 데이터 저장 좌표계)
   // 시각 크기는 baseDim × viewportScale로 계산
@@ -116,6 +138,7 @@
   let isEditingActive = $state(false)
   let isSelectMode = $derived(currentTool === 'select')
   let isTextMode = $derived(currentTool === 'text')
+  let isNativeInteraction = $derived(isReadOnly || currentTool === 'contentSelect')
   // 과거 버전 미리보기 중 — 현재 편집(currentEditCanvasId) 외 항목이 켜져 있으면 true.
   // 이때 편집 레이어(현재 버전)를 숨겨, 체크한 과거 이력만 보이게 한다. (체크 해제 시 복귀)
   let isPreviewingHistory = $derived(
@@ -124,15 +147,17 @@
 
   // 현재 페이지 derived state
   let currentPage = $state(1)
+  let programmaticPage: number | null = null
+  let programmaticPageTimer: ReturnType<typeof setTimeout> | null = null
 
   // Undo/Redo state for reactivity
   let canUndoState = $state(false)
   let canRedoState = $state(false)
 
-  // 편집 모드 동기화: readOnly가 아니면 모든 도구(select 포함)에서 캔버스 이벤트 수신
+  // 편집 모드 동기화: readOnly/contentSelect에서는 PDF.js DOM 레이어가 포인터 소유권을 가진다.
   // → CSS .editing-active 클래스 토글로 pointer-events: auto 적용
   $effect(() => {
-    isEditingActive = !isReadOnly
+    isEditingActive = !isNativeInteraction
   })
 
   // 스케일 변경 감지 — Paper.js·UserOverlay는 view.zoom/displayScale만 동기 갱신(데이터 보존),
@@ -266,6 +291,144 @@
     pageBaseDimensions = new Map(currentDimensions)
   }
 
+  /** 이전 검색 강조를 원래 PDF.js text DOM으로 되돌린다. */
+  function clearSearchHighlights(layer: HTMLDivElement): void {
+    layer.querySelectorAll<HTMLElement>('[data-inko-search-highlight]').forEach((highlight) => {
+      const parent = highlight.parentNode
+      highlight.replaceWith(document.createTextNode(highlight.textContent ?? ''))
+      parent?.normalize()
+    })
+  }
+
+  interface SearchTextNode {
+    node: Text
+    start: number
+    end: number
+  }
+
+  /** PDF.js TextLayer의 텍스트 노드 위치를 하나의 UTF-16 문자열 좌표로 평탄화한다. */
+  function collectSearchTextNodes(layer: HTMLDivElement): { text: string; nodes: SearchTextNode[] } {
+    const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT)
+    const nodes: SearchTextNode[] = []
+    let text = ''
+    let node = walker.nextNode() as Text | null
+    while (node) {
+      const value = node.data
+      const start = text.length
+      text += value
+      nodes.push({ node, start, end: start + value.length })
+      node = walker.nextNode() as Text | null
+    }
+    return { text, nodes }
+  }
+
+  /**
+   * 현재 질의의 페이지 내 모든 literal 결과를 강조한다.
+   * PDF.js 비공개 TextHighlighter deep import 없이 TextLayer가 만든 텍스트 노드만 감싼다.
+   */
+  function applySearchHighlights(pageNum: number): void {
+    const layer = textLayerElements.get(pageNum)
+    if (!layer) return
+    clearSearchHighlights(layer)
+
+    const state = searchState
+    const normalizedQuery = state?.query.normalize('NFC') ?? ''
+    if (!state || state.status !== 'ready' || normalizedQuery.length === 0) return
+
+    const { text, nodes } = collectSearchTextNodes(layer)
+    const haystack = state.caseSensitive ? text.normalize('NFC') : text.normalize('NFC').toLowerCase()
+    const needle = state.caseSensitive ? normalizedQuery : normalizedQuery.toLowerCase()
+    if (!needle) return
+
+    const selectedPageOrdinal = state.currentIndex < 0
+      ? -1
+      : state.matches
+          .slice(0, state.currentIndex + 1)
+          .filter((match) => match.pageNumber === pageNum).length - 1
+
+    const ranges: Array<{ start: number; end: number; selected: boolean }> = []
+    let from = 0
+    let ordinal = 0
+    while (from <= haystack.length - needle.length) {
+      const start = haystack.indexOf(needle, from)
+      if (start < 0) break
+      ranges.push({ start, end: start + needle.length, selected: ordinal === selectedPageOrdinal })
+      ordinal++
+      from = start + needle.length
+    }
+
+    // 뒤에서 앞으로 감싸야 앞선 Text 노드의 offset이 유지된다.
+    for (let rangeIndex = ranges.length - 1; rangeIndex >= 0; rangeIndex--) {
+      const range = ranges[rangeIndex]!
+      for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {
+        const entry = nodes[nodeIndex]!
+        const start = Math.max(range.start, entry.start)
+        const end = Math.min(range.end, entry.end)
+        if (start >= end) continue
+
+        const localStart = start - entry.start
+        const localEnd = end - entry.start
+        const matched = localEnd < entry.node.length
+          ? entry.node.splitText(localEnd)
+          : null
+        const selectedText = localStart > 0 ? entry.node.splitText(localStart) : entry.node
+        const highlight = document.createElement('span')
+        highlight.className = range.selected ? 'highlight selected' : 'highlight'
+        highlight.dataset.inkoSearchHighlight = ''
+        selectedText.parentNode?.insertBefore(highlight, selectedText)
+        highlight.append(selectedText)
+        void matched
+      }
+    }
+  }
+
+  function handleDomLayersReady(result: PdfPageDomLayersReady): void {
+    if (result.textLayer) textLayerElements.set(result.pageNumber, result.textLayer)
+    else textLayerElements.delete(result.pageNumber)
+    applySearchHighlights(result.pageNumber)
+  }
+
+  /** 검색 이동/내부 링크가 가상화 범위 밖 페이지를 요구할 때 실제 렌더 완료까지 기다린다. */
+  export async function ensurePageRendered(pageNum: number): Promise<void> {
+    if (pageNum < 1 || pageNum > totalPages || renderedPages.has(pageNum)) return
+
+    scrollToPage(pageNum, 'auto')
+    scrollMode?.requestRender(pageNum)
+    if (renderedPages.has(pageNum)) return
+
+    await new Promise<void>((resolve) => {
+      const waiters = pageRenderWaiters.get(pageNum) ?? new Set<() => void>()
+      waiters.add(resolve)
+      pageRenderWaiters.set(pageNum, waiters)
+    })
+    await tick()
+  }
+
+  /** 검색 상태 전환·next/previous 때 현재 렌더된 text layer 강조를 동기화한다. */
+  $effect(() => {
+    const state = searchState
+    if (!state) return
+    void state.currentIndex
+    void state.query
+    void state.status
+    untrack(() => {
+      textLayerElements.forEach((_layer, pageNum) => applySearchHighlights(pageNum))
+    })
+  })
+
+  // document와 totalPages가 같은 flush에서 확정되지 않아도 VisibilityManager가 0페이지에 고정되지 않게 동기화.
+  $effect(() => {
+    const pageCount = totalPages
+    const mode = scrollMode
+    if (!mode) return
+    untrack(() => {
+      mode.updateTotalPages(pageCount)
+      if (pageCount > 0) {
+        void tick().then(() => mode.triggerInitialRender())
+      }
+    })
+  })
+
   /**
    * 페이지 렌더링 완료 핸들러 — scrollMode에서 오프스크린 캔버스(시각 크기) 수신
    * 1. 1.0x baseline 크기 보정 (canvas.width = baseW × scale)
@@ -273,9 +436,10 @@
    * 3. tick() 후 PDF 이미지를 DOM 캔버스에 복사 (Paper.js/Overlay 초기화는 Svelte action에서 처리)
    */
   function handlePageRendered(pageNum: number, canvas: HTMLCanvasElement): void {
+    const renderedCanvas = canvas as PdfRenderedCanvas
     // canvas.width/height = baseDim × viewportScale × renderDpr (백버퍼 픽셀, DPR 오버샘플링됨)
     // baseDim 갱신: viewportScale와 renderDpr로 나눠 1.0x 기준 추출
-    const renderDpr = (canvas as any).__renderDpr || 1
+    const renderDpr = renderedCanvas.__renderDpr || 1
     if (canvas.width > 0 && canvas.height > 0 && viewportScale > 0) {
       const baseW = canvas.width / (viewportScale * renderDpr)
       const baseH = canvas.height / (viewportScale * renderDpr)
@@ -289,6 +453,19 @@
     }
 
     renderedPages = new Set([...renderedPages, pageNum])
+
+    if (renderedCanvas.__pdfPage && renderedCanvas.__logicalViewport) {
+      const nextMetadata = new Map(pageDomLayerMetadata)
+      nextMetadata.set(pageNum, {
+        pdfPage: renderedCanvas.__pdfPage,
+        viewport: renderedCanvas.__logicalViewport,
+        annotationCanvasMap: renderedCanvas.__annotationCanvasMap ?? new Map()
+      })
+      pageDomLayerMetadata = nextMetadata
+    }
+
+    pageRenderWaiters.get(pageNum)?.forEach((resolve) => resolve())
+    pageRenderWaiters.delete(pageNum)
 
     // User overlay 캔버스 크기 갱신 (1.0x baseline + 시각 스케일)
     const dims = pageBaseDimensions.get(pageNum)
@@ -334,6 +511,10 @@
     const newSet = new Set(renderedPages)
     newSet.delete(pageNum)
     renderedPages = newSet
+    textLayerElements.delete(pageNum)
+    const nextMetadata = new Map(pageDomLayerMetadata)
+    nextMetadata.delete(pageNum)
+    pageDomLayerMetadata = nextMetadata
   }
 
   /**
@@ -712,8 +893,19 @@
   }
 
   // 외부 API: 특정 페이지로 스크롤
-  export function scrollToPage(pageNum: number): void {
+  export function scrollToPage(pageNum: number, behavior: ScrollBehavior = 'smooth'): void {
     if (pageNum < 1 || pageNum > totalPages) return
+
+    // IntersectionObserver의 넓은 프리렌더 rootMargin이 인접 페이지를 먼저 보고해도
+    // 명시적으로 선택한 페이지 번호가 이동 직후 되돌아가지 않게 짧게 고정한다.
+    programmaticPage = pageNum
+    if (programmaticPageTimer) clearTimeout(programmaticPageTimer)
+    programmaticPageTimer = setTimeout(() => {
+      programmaticPage = null
+      programmaticPageTimer = null
+    }, 750)
+    currentPage = pageNum
+    onPageChange?.(pageNum)
 
     const pageContainer = pageContainers.get(pageNum)
     if (pageContainer && scrollContainer) {
@@ -724,7 +916,7 @@
 
       scrollContainer.scrollTo({
         top: scrollTop,
-        behavior: 'smooth'
+        behavior
       })
     }
   }
@@ -760,12 +952,28 @@
       onPageRendered: handlePageRendered,
       onPageUnrendered: handlePageUnrendered,
       onCurrentPageChange: (page) => {
+        if (programmaticPage !== null && page !== programmaticPage) return
         currentPage = page
         onPageChange?.(page)
       }
     })
 
     scrollMode.initialize(scrollContainer)
+
+    linkServiceController = createPdfLinkService({
+      getCurrentPage: () => currentPage,
+      setCurrentPage: (pageNumber) => {
+        currentPage = pageNumber
+        onPageChange?.(pageNumber)
+      },
+      ensurePageVisible: ensurePageRendered,
+      scrollPageIntoView: ({ pageNumber }) => scrollToPage(pageNumber, 'auto'),
+      onNavigationError: (error) => {
+        console.error('[PdfScrollViewer] PDF link navigation failed:', error)
+      }
+    })
+    linkServiceController.setDocument(pdfDoc, window.location.href)
+    pdfLinkService = linkServiceController.service
 
     // 이미 렌더링된 페이지 컨테이너들을 등록
     await tick()
@@ -814,6 +1022,17 @@
 
     // Scroll mode 정리
     scrollMode?.dispose()
+    linkServiceController?.dispose()
+    linkServiceController = null
+    pdfLinkService = null
+
+    pageRenderWaiters.forEach((waiters) => waiters.forEach((resolve) => resolve()))
+    pageRenderWaiters.clear()
+    textLayerElements.clear()
+    pageDomLayerMetadata = new Map()
+    if (programmaticPageTimer) clearTimeout(programmaticPageTimer)
+    programmaticPageTimer = null
+    programmaticPage = null
 
     // 잔존 fast-scrolling 클래스 제거 — unmount 직전 fast 상태로 끝났을 가능성
     document.documentElement.classList.remove('fast-scrolling')
@@ -828,6 +1047,7 @@
   class:editing-active={isEditingActive}
   class:select-mode={isSelectMode}
   class:text-mode={isTextMode}
+  class:native-interaction={isNativeInteraction}
   class:previewing-history={isPreviewingHistory}
   bind:this={scrollContainer}
 >
@@ -835,6 +1055,7 @@
     {#each pageNumbers as pageNum (pageNum)}
       {@const baseDims = pageBaseDimensions.get(pageNum)}
       {@const isRendered = renderedPages.has(pageNum)}
+      {@const domMetadata = pageDomLayerMetadata.get(pageNum)}
       {@const visualW = baseDims ? Math.floor(baseDims.width * viewportScale) : Math.floor(612 * viewportScale)}
       {@const visualH = baseDims ? Math.floor(baseDims.height * viewportScale) : Math.floor(792 * viewportScale)}
 
@@ -851,6 +1072,19 @@
             class="scroll-page-canvas-pdf"
             use:pdfCanvasAction={pageNum}
           ></canvas>
+
+          {#if pdfLinkService && domMetadata}
+            <PdfPageDomLayers
+              pdfDocument={pdfDoc!}
+              pdfPage={domMetadata.pdfPage}
+              viewport={domMetadata.viewport}
+              linkService={pdfLinkService}
+              readOnly={isReadOnly}
+              annotationCanvasMap={domMetadata.annotationCanvasMap}
+              onReady={handleDomLayersReady}
+              onError={(error) => console.error(`[PdfScrollViewer] PDF DOM layers failed on page ${pageNum}:`, error)}
+            />
+          {/if}
 
           <!-- User Overlay Container -->
           <div
@@ -937,6 +1171,18 @@
     width: 100%;
     height: 100%;
     z-index: var(--z-pdf);
+  }
+
+  /* PDF.js DOM 레이어는 readOnly 또는 명시적 내용 선택 모드에서만 상호작용한다. */
+  .scroll-viewer:not(.native-interaction) :global(.inko-text-layer) {
+    pointer-events: none !important;
+    user-select: none;
+  }
+
+  .scroll-viewer.native-interaction :global(.inko-text-layer) {
+    pointer-events: auto;
+    user-select: text;
+    cursor: text;
   }
 
   .scroll-page-overlay-container {

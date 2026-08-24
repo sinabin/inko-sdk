@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "package": "pdfjs-dist",
+    "version": "5.4.624",
+    "license": "Apache-2.0",
+    "assetGlob": "web/images/annotation-*.svg",
+    "licensePath": "LICENSE"
+  },
+  "algorithm": "SHA-256",
+  "files": {
+    "annotation-check.svg": "9a680f1212888ede7dcae6bfc8cafc447babf4ce531271c8d07277b0aedade96",
+    "annotation-comment.svg": "c58b385b4a0be6de822a3262b8191073d1730f6420368bd9c6d80db7312327ff",
+    "annotation-help.svg": "74d9bba0814d12f5ae2715189e1747b7edf5ff6d82c4ca75bae86d717319b6eb",
+    "annotation-insert.svg": "b2153e2c88c62179029ea9876d463216529ecf581b77d52c971a2cdf3d3166c6",
+    "annotation-key.svg": "5772b8dd158b0f02bb2be689bb680f4903d84e202cb29a3dc0560af53134c6ba",
+    "annotation-newparagraph.svg": "a583cca122263d94c3eebfefe83c965a1b305b9c84e5aa3c5ba10527941db7db",
+    "annotation-noicon.svg": "76399e70d311834d11ab2d6239118b36847d79a78d7655b1f839d51c811304cf",
+    "annotation-note.svg": "11a75c9f233dd3e5e3500edcdd733358394f28395337616e8b0430694bf0dba1",
+    "annotation-paperclip.svg": "0213c8baed4f8c497881ffed0e49abb309291d51725aaf1a0a757174b4999368",
+    "annotation-paragraph.svg": "efbcd2a6cfb4581dad74a1c09ad43cf2b8245611e5b19c966317da948f2bcb7c",
+    "annotation-pushpin.svg": "22197186d18445959e5fe5577d8e34440b31d87c811daf47318078310c0c5530",
+    "LICENSE.pdfjs-dist": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  }
+}

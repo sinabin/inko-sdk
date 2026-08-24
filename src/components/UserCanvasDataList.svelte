@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import { fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import type { UserCanvasInfo } from '../types'
@@ -29,6 +30,24 @@
   }: Props = $props()
 
   let listElement = $state<HTMLUListElement | null>(null)
+  let closeButtonElement = $state<HTMLButtonElement | null>(null)
+  let returnFocusElement: HTMLElement | null = null
+  let wasVisible = false
+  let selectedVersionIndex = $derived(userCanvasData.findIndex(data => data.enabled ?? false))
+
+  $effect(() => {
+    if (isVisible && !wasVisible) {
+      if (
+        typeof document !== 'undefined'
+        && document.activeElement instanceof HTMLElement
+        && document.activeElement !== document.body
+      ) {
+        returnFocusElement = document.activeElement
+      }
+      tick().then(() => closeButtonElement?.focus())
+    }
+    wasVisible = isVisible
+  })
 
   /** Safari/WebView 호환 날짜 파싱 (yyyy-MM-dd HH:mm:ss → ISO 형식 변환) */
   function formatDate(dateStr: string | undefined): string {
@@ -55,15 +74,41 @@
   }
 
   /** 같은 작성자의 여러 버전도 보조기술에서 서로 구분할 수 있도록 시각 정보와 순번을 함께 제공. */
-  function getSelectionLabel(data: UserCanvasInfo, index: number, visible: boolean): string {
+  function getSelectionLabel(data: UserCanvasInfo, index: number, isCurrent: boolean): string {
     const name = data.userName || t('history.unknownUser')
     if (!isVersionHistoryMode) {
-      return visible ? t('history.hideUser', { name }) : t('history.showUser', { name })
+      return t('history.layerVisibility', { name })
     }
 
     const date = formatDate(data.registeredAt)
     const position = `${index + 1}/${userCanvasData.length}`
-    return date === '-' ? `${name}, ${position}` : `${name}, ${date}, ${position}`
+    const current = isCurrent ? `, ${t('history.currentVersion')}` : ''
+    return date === '-' ? `${name}, ${position}${current}` : `${name}, ${date}, ${position}${current}`
+  }
+
+  function getContinueEditLabel(data: UserCanvasInfo): string {
+    return t('history.continueEditLabel', {
+      name: data.userName || t('history.unknownUser'),
+      date: formatDate(data.registeredAt)
+    })
+  }
+
+  function handleClose(): void {
+    const focusTarget = returnFocusElement?.isConnected
+      ? returnFocusElement
+      : typeof document !== 'undefined'
+        ? document.querySelector<HTMLElement>('.history-btn')
+        : null
+    onClose?.()
+    setTimeout(() => focusTarget?.focus(), 0)
+  }
+
+  function handlePanelKeydown(event: KeyboardEvent): void {
+    if (isVisible && event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      handleClose()
+    }
   }
 
   /** 버전은 항상 선택 요청, 협업 레이어는 기존처럼 보이기/숨기기 토글. */
@@ -101,15 +146,28 @@
   }
 </script>
 
+<svelte:window onkeydown={handlePanelKeydown} />
+
 {#if isVisible}
   <div
+    id="user-canvas-history-panel"
     class="user-canvas-data-list"
+    role="region"
+    aria-labelledby="user-canvas-history-title"
+    tabindex="-1"
     transition:fly={{ x: 24, duration: 320, easing: cubicOut, opacity: 0 }}
   >
     <div class="list-header">
-      <h3>{t('history.title')}</h3>
-      <button class="close-btn" onclick={() => onClose?.()}>
-        &times;
+      <h3 id="user-canvas-history-title">{t('history.title')}</h3>
+      <button
+        bind:this={closeButtonElement}
+        type="button"
+        class="close-btn"
+        onclick={handleClose}
+        aria-label={t('history.close')}
+        title={t('history.close')}
+      >
+        <span aria-hidden="true">&times;</span>
       </button>
     </div>
 
@@ -133,15 +191,16 @@
             class="list-item"
             class:enabled={visible && !showAsCurrent}
             class:current={showAsCurrent}
+            role={isVersionHistoryMode ? 'none' : undefined}
           >
             <button
               type="button"
               class="item-select"
               role={isVersionHistoryMode ? 'radio' : undefined}
-              tabindex={isVersionHistoryMode ? (visible ? 0 : -1) : 0}
+              tabindex={isVersionHistoryMode ? (index === (selectedVersionIndex >= 0 ? selectedVersionIndex : 0) ? 0 : -1) : 0}
               aria-checked={isVersionHistoryMode ? visible : undefined}
               aria-pressed={isVersionHistoryMode ? undefined : visible}
-              aria-label={getSelectionLabel(data, index, visible)}
+              aria-label={getSelectionLabel(data, index, isCurrent)}
               onclick={() => handleCardSelect(data.canvasId, visible)}
               onkeydown={(event) => handleVersionKeydown(event, index)}
             >
@@ -176,8 +235,10 @@
             {#if !isReadOnly && !isCurrent}
               <div class="item-actions">
                 <button
+                  type="button"
                   class="load-btn"
                   onclick={(e) => handleLoadHistory(data.canvasId, e)}
+                  aria-label={getContinueEditLabel(data)}
                 >
                   {t('history.continueEdit')}
                 </button>
@@ -285,6 +346,12 @@
     transition: background-color var(--motion-base) var(--ease-out);
   }
 
+  .close-btn:focus-visible,
+  .load-btn:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
   .item-select {
     display: block;
     width: 100%;
@@ -349,7 +416,7 @@
   }
 
   .visibility-indicator.visible {
-    color: var(--color-primary-strong);
+    color: var(--color-primary-strong-hover);
   }
 
   .user-name {
@@ -401,7 +468,7 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all var(--motion-base) var(--ease-out);
-    color: var(--color-text-inverse);
+    color: var(--color-text-primary);
     min-height: 40px;
     box-shadow: var(--shadow-save-action);
   }

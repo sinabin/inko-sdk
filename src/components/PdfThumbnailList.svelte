@@ -90,8 +90,10 @@
     const _page = currentPage
     tick().then(() => {
       if (activeThumbnailEl) {
+        const reduceMotion = typeof window !== 'undefined'
+          && window.matchMedia('(prefers-reduced-motion: reduce)').matches
         activeThumbnailEl.scrollIntoView({
-          behavior: 'smooth',
+          behavior: reduceMotion ? 'auto' : 'smooth',
           block: 'nearest'
         })
       }
@@ -103,9 +105,13 @@
   }
 </script>
 
-<div class="thumbnail-sidebar">
+<nav
+  id="pdf-thumbnail-sidebar"
+  class="thumbnail-sidebar"
+  aria-label={t('thumbnails.navigationLabel')}
+>
   {#if !pdfDocument}
-    <div class="no-pdf">
+    <div class="no-pdf" role="status">
       <div class="no-pdf-text">{t('thumbnails.noPdf')}</div>
     </div>
   {:else}
@@ -115,26 +121,26 @@
           {fileName}
         </div>
       {/if}
-      <div class="thumbnail-list">
+      <ol class="thumbnail-list" aria-label={t('thumbnails.listLabel')}>
         {#each renderedPages as pageNum (pageNum)}
-          <div use:activeRef={pageNum === currentPage}>
+          <li use:activeRef={pageNum === currentPage}>
             <PdfThumbnail
               pdfDocument={pdfDocument}
               pageNumber={pageNum}
               isActive={pageNum === currentPage}
               onPageClick={handlePageClick}
             />
-          </div>
+          </li>
         {/each}
         {#if queueLength > 0}
-          <div class="loading-info">
+          <li class="loading-info" role="status" aria-live="polite" aria-atomic="true">
             {t('thumbnails.loadingList', { n: renderedPages.length, total: totalPages })}
-          </div>
+          </li>
         {/if}
-      </div>
+      </ol>
     </div>
   {/if}
-</div>
+</nav>
 
 <style>
   .thumbnail-sidebar {
@@ -188,6 +194,13 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-3);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .thumbnail-list > li {
+    display: block;
   }
 
   .loading-info {

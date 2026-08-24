@@ -2,6 +2,12 @@
   import { onMount, onDestroy, tick, untrack } from 'svelte'
   import type { ToolMode, OrientationMode, UserCanvasInfo, PdfOutlineNode } from '../types'
   import { createPdfLoader } from '../lib/pdf/pdfLoader.svelte'
+  import {
+    createPdfSearch,
+    type PdfSearch,
+    type PdfSearchMatch,
+    type PdfSearchState
+  } from '../lib/pdf/pdfSearch.svelte'
   import { createPageNavigation } from '../lib/pdf/pageNavigation.svelte'
   import { extractOutline } from '../lib/pdf/pdfOutline'
   import { createZoomControl, ZOOM_MIN_SCALE, ZOOM_MAX_SCALE } from '../lib/interaction/zoomControl.svelte'
@@ -19,6 +25,7 @@
     sendPdfLoaded,
     sendCanvasDataChanged,
     sendSaveCanvasResponse,
+    sendExportPdfResponse,
     sendCloseRequest,
     sendSetOrientation
   } from '../lib/bridge/postMessageBridge'
@@ -28,6 +35,7 @@
   import { setLocale, setMessages, t } from '../lib/i18n/index.svelte'
   import PdfToolbar from './PdfToolbar.svelte'
   import PdfScrollViewer from './PdfScrollViewer.svelte'
+  import PdfSearchBar from './PdfSearchBar.svelte'
   import PdfThumbnailList from './PdfThumbnailList.svelte'
   import TextInputOverlay from './TextInputOverlay.svelte'
   import UserCanvasDataList from './UserCanvasDataList.svelte'
@@ -114,6 +122,23 @@
   let textInputInitialText = $state('')
   let isHistoryPanelVisible = $state(false)
 
+  const EMPTY_SEARCH_STATE: PdfSearchState = Object.freeze({
+    status: 'idle',
+    query: '',
+    caseSensitive: false,
+    matches: Object.freeze([]),
+    currentIndex: -1,
+    currentMatch: null,
+    totalMatches: 0,
+    wrapped: false,
+    indexedPages: 0,
+    failedPages: Object.freeze([])
+  })
+  let pdfSearch: PdfSearch | null = null
+  let searchState = $state<PdfSearchState>(EMPTY_SEARCH_STATE)
+  let searchQuery = $state('')
+  let isSearchOpen = $state(false)
+
   // 책갈피(PDF 내장 목차) — 문서에서 파생되는 읽기 전용 정보이므로 저장·왕복 대상이 아님
   let outline = $state<PdfOutlineNode[]>([])
   let isOutlineLoading = $state(false)
@@ -135,7 +160,7 @@
   let toolFeatures = $state<Record<string, boolean>>({})
 
   const TOOL_MODES: readonly ToolMode[] = [
-    'select', 'pen', 'highlighter', 'eraser', 'text', 'rectangle', 'circle', 'line'
+    'select', 'contentSelect', 'pen', 'highlighter', 'eraser', 'text', 'rectangle', 'circle', 'line'
   ]
 
   /** 공개 SDK의 enabled 목록을 실제 ToolMode만 남기고 정규화 */
@@ -213,6 +238,12 @@
    */
   function handleGlobalKeyDown(e: KeyboardEvent) {
     const target = e.target as HTMLElement | null
+    const cmd = e.ctrlKey || e.metaKey
+    if (cmd && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault()
+      openPdfSearch()
+      return
+    }
     if (target && (
       target.tagName === 'INPUT' ||
       target.tagName === 'TEXTAREA' ||
@@ -220,7 +251,6 @@
     )) {
       return
     }
-    const cmd = e.ctrlKey || e.metaKey
     if (!cmd) return
 
     if (e.key === '+' || e.key === '=') {
@@ -482,6 +512,67 @@
     if (hasSelection) {
       hasSelection = false
     }
+  }
+
+  function resetPdfSearch(): void {
+    pdfSearch?.dispose()
+    pdfSearch = null
+    searchState = EMPTY_SEARCH_STATE
+    searchQuery = ''
+    isSearchOpen = false
+  }
+
+  async function navigateToSearchMatch(match: PdfSearchMatch): Promise<void> {
+    const viewer = scrollViewerComponent
+    if (!viewer) return
+    pageNav.goToPage(match.pageNumber)
+    await viewer.ensurePageRendered(match.pageNumber)
+    viewer.scrollToPage(match.pageNumber, 'auto')
+  }
+
+  function initializePdfSearch(): void {
+    pdfSearch?.dispose()
+    const document = pdfLoader.document
+    if (!document) {
+      pdfSearch = null
+      searchState = EMPTY_SEARCH_STATE
+      return
+    }
+
+    pdfSearch = createPdfSearch({
+      pdfDocument: document,
+      onStateChange: (state) => {
+        searchState = state
+      },
+      onNavigate: (match) => {
+        void navigateToSearchMatch(match)
+      }
+    })
+    searchState = pdfSearch.state
+  }
+
+  function openPdfSearch(): void {
+    if (!pdfLoader.document) return
+    isSearchOpen = true
+    // 검색 결과 선택·복사가 Paper.js 입력에 가려지지 않도록 명시적 PDF 내용 선택으로 전환한다.
+    if (!isReadOnly && currentTool !== 'contentSelect') handleToolChange('contentSelect')
+  }
+
+  function closePdfSearch(): void {
+    isSearchOpen = false
+  }
+
+  function handleSearchQueryChange(query: string): void {
+    searchQuery = query
+    void pdfSearch?.search(query)
+  }
+
+  function handleSearchNext(): void {
+    pdfSearch?.next()
+  }
+
+  function handleSearchPrevious(): void {
+    pdfSearch?.previous()
   }
 
   // Handle zoom change
@@ -799,7 +890,7 @@
   /** 목차 항목 클릭 — 해당 페이지로 이동. 패널은 연속 탐색을 위해 열어 둠 */
   function handleOutlineNavigate(page: number) {
     pageNav.goToPage(page)
-    scrollViewerComponent?.scrollToPage(page)
+    scrollViewerComponent?.scrollToPage(page, 'auto')
   }
 
   // Handle thumbnail sidebar toggle
@@ -901,10 +992,12 @@
     // 기존 프리뷰 정리
     lowResPreview.clearPreviews()
     resetOutline()
+    resetPdfSearch()
 
     const success = await pdfLoader.loadFromUrl(url, fileName)
     if (success && pdfLoader.document) {
       pageNav.setTotalPages(pdfLoader.totalPages)
+      initializePdfSearch()
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
       // 내장 목차 추출 — 첫 페이지 표시·pdfLoaded 뒤에서 비동기 실행
@@ -920,10 +1013,12 @@
     // 기존 프리뷰 정리
     lowResPreview.clearPreviews()
     resetOutline()
+    resetPdfSearch()
 
     const success = await pdfLoader.loadFromBase64(base64, fileName)
     if (success && pdfLoader.document) {
       pageNav.setTotalPages(pdfLoader.totalPages)
+      initializePdfSearch()
       // 백그라운드에서 저해상도 프리뷰 생성
       lowResPreview.generateAllPreviews(pdfLoader.document)
       // 내장 목차 추출 — 첫 페이지 표시·pdfLoaded 뒤에서 비동기 실행
@@ -1056,6 +1151,20 @@
         handleSave()
       },
 
+      onExportPdf: async (requestId) => {
+        try {
+          const pdfBytes = await pdfLoader.exportPdf()
+          if (!pdfBytes) {
+            sendExportPdfResponse(requestId, false, undefined, '내보낼 PDF 문서가 없습니다')
+            return
+          }
+          sendExportPdfResponse(requestId, true, pdfBytes)
+        } catch (error) {
+          reportError('render', 'PDF 양식 데이터를 내보내지 못했습니다', error)
+          sendExportPdfResponse(requestId, false, undefined, 'PDF 내보내기에 실패했습니다')
+        }
+      },
+
       onClearCanvas: () => {
         clearCurrentCanvas()
       },
@@ -1171,6 +1280,7 @@
 
   onDestroy(() => {
     resetOutline()
+    resetPdfSearch()
     cleanupPointerTracking?.()
     cleanupPostMessage?.()
     cleanupLandscapeListener?.()
@@ -1259,6 +1369,38 @@
         <p>오류: {pdfLoader.error}</p>
       </div>
     {:else if pdfLoader.document}
+      <div class="pdf-native-controls" aria-label="PDF 내용 도구">
+        <button
+          type="button"
+          data-tool="contentSelect"
+          class:active={isReadOnly || currentTool === 'contentSelect'}
+          aria-pressed={isReadOnly || currentTool === 'contentSelect'}
+          aria-label="PDF 텍스트 및 양식 선택"
+          title="PDF 텍스트 및 양식 선택"
+          onclick={() => handleToolChange('contentSelect')}
+        >내용 선택</button>
+
+        {#if toolFeatures.search !== false}
+          {#if !isSearchOpen}
+            <button
+              type="button"
+              data-testid="pdf-search-open"
+              aria-label="PDF 검색"
+              title="PDF 검색 (Ctrl/⌘+F)"
+              onclick={openPdfSearch}
+            >검색</button>
+          {/if}
+          <PdfSearchBar
+            open={isSearchOpen}
+            query={searchQuery}
+            state={searchState}
+            onQueryChange={handleSearchQueryChange}
+            onPrevious={handleSearchPrevious}
+            onNext={handleSearchNext}
+            onClose={closePdfSearch}
+          />
+        {/if}
+      </div>
       {#if showThumbnails && toolFeatures.thumbnails !== false}
         <PdfThumbnailList
           pdfDocument={pdfLoader.document}
@@ -1283,6 +1425,7 @@
           userCanvasData={userCanvasData}
           currentEditCanvasId={currentEditCanvasId}
           isVersionHistoryMode={isVersionHistoryMode}
+          searchState={searchState}
           onPageChange={handlePageChange}
           onCanvasChange={handleCanvasChange}
           onTextInputRequest={handleTextInputRequest}
@@ -1373,6 +1516,43 @@
     overflow: hidden;
     display: flex;
     position: relative;
+  }
+
+  .pdf-native-controls {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-3);
+    z-index: 980;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    max-width: calc(100% - var(--space-6));
+  }
+
+  .pdf-native-controls > button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .pdf-native-controls > button:hover,
+  .pdf-native-controls > button.active {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+  }
+
+  .pdf-native-controls > button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

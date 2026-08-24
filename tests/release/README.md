@@ -22,14 +22,14 @@ node tests/release/verify-installed-tarball.mjs
 Run against an explicit archive:
 
 ```powershell
-node tests/release/verify-installed-tarball.mjs C:\path\to\inko-pdf-sdk-1.0.0.tgz
+node tests/release/verify-installed-tarball.mjs C:\path\to\inko-pdf-sdk-1.1.0.tgz
 ```
 
 For a public release candidate, also enforce public Apache metadata and a
 package-root project license:
 
 ```powershell
-node tests/release/verify-installed-tarball.mjs C:\path\to\inko-pdf-sdk-1.0.0.tgz --expect-public
+node tests/release/verify-installed-tarball.mjs C:\path\to\inko-pdf-sdk-1.1.0.tgz --expect-public
 ```
 
 The `--expect-public` gate requires the exact package name `inko-pdf-sdk`,

@@ -15,6 +15,7 @@ afterEach(() => {
   document.body.innerHTML = ''
   delete (window as any).Inko
 })
+
 beforeEach(() => {
   document.body.innerHTML = '<div id="viewer"></div>'
 })
@@ -94,5 +95,53 @@ describe('공개 iframe SDK 수명주기', () => {
       source: iframeWindow
     }))
     expect(onPdfLoaded).not.toHaveBeenCalled()
+  })
+
+  it('exportPdf requestId 응답을 독립 ArrayBuffer Promise로 연결한다', async () => {
+    const sdk = loadSdk()
+    const viewer = sdk.mount('#viewer', { src: '/viewer/index.html' })
+    const iframeWindow = viewer.iframe.contentWindow as Window
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'viewerReady' },
+      origin: window.location.origin,
+      source: iframeWindow
+    }))
+
+    const postSpy = vi.spyOn(iframeWindow, 'postMessage')
+    const exported = viewer.exportPdf()
+    const request = postSpy.mock.calls
+      .map(([message]) => message as any)
+      .find((message) => message?.type === 'exportPdf')
+    expect(request?.data?.requestId).toMatch(/^inko-export-/)
+
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        type: 'exportPdfResponse',
+        requestId: request.data.requestId,
+        success: true,
+        pdfBytes: bytes
+      },
+      origin: window.location.origin,
+      source: iframeWindow
+    }))
+
+    await expect(exported).resolves.toBe(bytes)
+    viewer.destroy()
+  })
+
+  it('destroy가 미결 exportPdf를 명시적으로 reject한다', async () => {
+    const sdk = loadSdk()
+    const viewer = sdk.mount('#viewer', { src: '/viewer/index.html' })
+    const iframeWindow = viewer.iframe.contentWindow as Window
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'viewerReady' },
+      origin: window.location.origin,
+      source: iframeWindow
+    }))
+
+    const exported = viewer.exportPdf()
+    viewer.destroy()
+    await expect(exported).rejects.toThrow(/destroyed before exportPdf completed/)
   })
 })

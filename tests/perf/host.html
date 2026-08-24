@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inko 120p performance harness</title>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    /* 612pt fixture + viewer content horizontal padding 32px = fit-width 1.0 */
+    #viewer { width: 644px; height: 100%; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script src="/pdfv/sdk/pdfv-sdk.js"></script>
+  <script>
+    window.__inkoPerf = {
+      hostStartedAt: performance.now(),
+      readyAt: null,
+      loadStartedAt: null,
+      loadStartedEpochMs: null,
+      pdfLoadedAt: null,
+      phase: 'boot',
+      errors: []
+    };
+
+    function startMeasuredLoad() {
+      if (window.__inkoPerf.phase !== 'priming') return;
+      window.__inkoPerf.phase = 'measured';
+      var frameWindow = window.__inkoPerf.viewer.iframe.contentWindow;
+      var metrics = frameWindow && frameWindow.__inkoPerfMetrics;
+      if (metrics) {
+        metrics.longTasks.length = 0;
+        metrics.jpegCreated.length = 0;
+        metrics.revoked.length = 0;
+      }
+      window.__inkoPerf.loadStartedAt = performance.now();
+      window.__inkoPerf.loadStartedEpochMs = Date.now();
+      window.__inkoPerf.viewer.loadPdfUrl(
+        '/pdfv/perf/inko-perf-v1-120p.pdf',
+        'inko-perf-v1-120p.pdf',
+        undefined,
+        true
+      );
+    }
+
+    function waitForPrimedPageCount() {
+      if (window.__inkoPerf.phase !== 'priming') return;
+      var doc = window.__inkoPerf.viewer.iframe.contentDocument;
+      if (doc && doc.querySelectorAll('.scroll-page-container').length === 120) {
+        requestAnimationFrame(function () { requestAnimationFrame(startMeasuredLoad); });
+        return;
+      }
+      setTimeout(waitForPrimedPageCount, 16);
+    }
+
+    window.__inkoPerf.viewer = Inko.mount('#viewer', {
+      src: '/pdfv/index.html',
+      readOnly: true,
+      tools: {
+        features: {
+          save: false,
+          history: false,
+          bookmarks: false,
+          thumbnails: false,
+          orientation: false
+        }
+      },
+      onReady: function () {
+        window.__inkoPerf.readyAt = performance.now();
+        // 첫 load는 page-count 반응 상태만 예열하는 비계측 단계다.
+        // 같은 fixture를 다시 여는 공개 loadPdfUrl 교체 경로부터 시간을 측정한다.
+        setTimeout(function () {
+          window.__inkoPerf.phase = 'priming';
+          window.__inkoPerf.viewer.loadPdfUrl(
+            '/pdfv/perf/inko-perf-v1-120p.pdf',
+            'inko-perf-v1-120p.pdf',
+            undefined,
+            true
+          );
+          waitForPrimedPageCount();
+        }, 0);
+      },
+      onPdfLoaded: function () {
+        if (window.__inkoPerf.phase === 'priming') {
+          setTimeout(startMeasuredLoad, 0);
+          return;
+        }
+        window.__inkoPerf.pdfLoadedAt = performance.now();
+      },
+      onError: function (error) {
+        window.__inkoPerf.errors.push(String(error && error.message ? error.message : error));
+      }
+    });
+  </script>
+</body>
+</html>

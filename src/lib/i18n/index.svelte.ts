@@ -18,9 +18,22 @@ const BUILTIN: Record<string, Dict> = { ko, en }
 let locale = $state<string>('ko')
 let overrides = $state<Dict>({})
 
+function syncDocumentLanguage(value: string): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = value
+  }
+}
+
+syncDocumentLanguage('ko')
+
 /** 로케일 설정 — 내장(ko/en) 또는 messages로 제공된 커스텀 언어 코드 */
 export function setLocale(l: string | undefined | null): void {
-  if (typeof l === 'string' && l.length > 0) locale = l
+  if (typeof l !== 'string') return
+  const nextLocale = l.trim()
+  if (!nextLocale) return
+
+  locale = nextLocale
+  syncDocumentLanguage(nextLocale)
 }
 
 /** 고객 제공 문구 병합 — 키별 덮어쓰기 (커스텀 언어/문구 커스터마이징) */

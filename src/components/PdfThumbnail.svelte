@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {onMount, onDestroy, untrack} from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
   import { t } from '../lib/i18n/index.svelte'
 
@@ -21,6 +21,15 @@
   let isLoading = $state(true)
   let error = $state(false)
   let errorDetail = $state('')
+  let accessibilityLabel = $derived(
+    error
+      ? t('thumbnail.pageErrorLabel', { n: pageNumber })
+      : isLoading
+        ? t('thumbnail.pageLoadingLabel', { n: pageNumber })
+        : isActive
+          ? t('thumbnail.currentPageLabel', { n: pageNumber })
+          : t('thumbnail.pageLabel', { n: pageNumber })
+  )
 
   let isMounted = true
   let renderTask: RenderTask | null = null
@@ -108,43 +117,56 @@
   })
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
+<button
+  type="button"
   class="thumbnail-container"
   class:active={isActive}
   onclick={() => onPageClick?.(pageNumber)}
+  aria-label={accessibilityLabel}
+  aria-current={isActive ? 'page' : undefined}
+  aria-busy={isLoading}
 >
-  <div class="thumbnail-content">
+  <span class="thumbnail-content" aria-hidden="true">
     {#if isLoading}
-      <div class="thumbnail-loading">
-        <div class="loading-text">{t('thumbnail.loading')}</div>
-      </div>
+      <span class="thumbnail-loading">
+        <span class="loading-text">{t('thumbnail.loading')}</span>
+      </span>
     {/if}
     {#if error}
-      <div class="thumbnail-error">
-        <div class="error-text">{errorDetail || t('thumbnail.error')}</div>
-      </div>
+      <span class="thumbnail-error">
+        <span class="error-text">{errorDetail || t('thumbnail.error')}</span>
+      </span>
     {/if}
     <canvas
       bind:this={canvasEl}
       style="opacity: {isLoading || error ? 0 : 1}"
       class="thumbnail-canvas"
+      aria-hidden="true"
     ></canvas>
-  </div>
-  <div class="thumbnail-label">{t('thumbnail.pageLabel', { n: pageNumber })}</div>
-</div>
+  </span>
+  <span class="thumbnail-label" aria-hidden="true">{t('thumbnail.pageLabel', { n: pageNumber })}</span>
+</button>
 
 <style>
   .thumbnail-container {
     position: relative;
+    display: block;
     cursor: pointer;
     padding: var(--space-1_5);
     border-radius: var(--radius-sm);
     width: 156px;
     border: 2px solid transparent;
     background-color: var(--gray-100);
+    color: inherit;
+    font: inherit;
+    text-align: initial;
+    appearance: none;
     transition: all var(--motion-base) var(--ease-out);
+  }
+
+  .thumbnail-container:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .thumbnail-container:hover:not(.active) {
@@ -202,6 +224,7 @@
   }
 
   .thumbnail-label {
+    display: block;
     text-align: center;
     font-size: var(--font-size-xs);
     margin-top: var(--space-1);

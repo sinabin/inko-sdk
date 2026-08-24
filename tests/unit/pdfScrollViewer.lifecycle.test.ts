@@ -12,6 +12,7 @@ afterEach(() => {
   }
   document.body.innerHTML = ''
 })
+
 describe('PdfScrollViewer 첫 페이지 준비 수명주기', () => {
   it('첫 페이지 렌더 전 destroy되면 미결 waitUntilFirstPageReady를 실패로 settle한다', async () => {
     const target = document.createElement('div')

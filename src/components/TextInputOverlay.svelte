@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import { t } from '../lib/i18n/index.svelte'
 
   interface Props {
@@ -21,29 +22,57 @@
 
   const fontSizePresets = [12, 16, 20, 24, 32, 48]
 
-  let inputText = $state(initialText)
-  let textareaEl: HTMLTextAreaElement | null = null
+  let inputText = $state('')
+  let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  let dialogEl = $state<HTMLDialogElement | null>(null)
+  let returnFocusElement: HTMLElement | null = null
   // IME(한글·일본어 등) 조합 진행 중 추적 — 합성 중 Enter는 문자 선택용이지 confirm 아님
   let isComposing = false
 
-  // 표시 상태 변경 시 텍스트 초기화
+  // 표시 상태 변경 시 텍스트 초기화 + 모달 초기 포커스
   $effect(() => {
-    if (isVisible) {
-      inputText = initialText
-      // 렌더링 후 textarea 포커스
-      setTimeout(() => {
-        textareaEl?.focus()
-        textareaEl?.select()
-      }, 0)
+    if (!isVisible || !dialogEl) return
+
+    inputText = initialText
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement
+      returnFocusElement = active instanceof HTMLElement && active !== document.body ? active : null
     }
+    if (!dialogEl.open) {
+      if (typeof dialogEl.showModal === 'function') dialogEl.showModal()
+      else dialogEl.setAttribute('open', '')
+    }
+    tick().then(() => {
+      textareaEl?.focus()
+      textareaEl?.select()
+    })
   })
 
   function handleConfirm() {
+    closeDialog()
     onConfirm?.(inputText)
+    restoreFocus()
   }
 
   function handleCancel() {
+    closeDialog()
     onCancel?.()
+    restoreFocus()
+  }
+
+  function closeDialog(): void {
+    if (!dialogEl?.open) return
+    if (typeof dialogEl.close === 'function') dialogEl.close()
+    else dialogEl.removeAttribute('open')
+  }
+
+  function restoreFocus(): void {
+    const focusTarget = returnFocusElement?.isConnected
+      ? returnFocusElement
+      : typeof document !== 'undefined'
+        ? document.querySelector<HTMLElement>('.tool-btn[data-tool="text"]')
+        : null
+    setTimeout(() => focusTarget?.focus(), 0)
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -56,8 +85,44 @@
       event.preventDefault()
       handleConfirm()
     } else if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
       handleCancel()
     }
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      handleCancel()
+      return
+    }
+
+    if (event.key !== 'Tab' || !dialogEl) return
+    const focusable = Array.from(dialogEl.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => element.tabIndex >= 0 && !element.hasAttribute('hidden'))
+    if (focusable.length === 0) {
+      event.preventDefault()
+      dialogEl.focus()
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
+  function handleDialogCancel(event: Event): void {
+    event.preventDefault()
+    handleCancel()
   }
 
   function handleCompositionStart() {
@@ -76,10 +141,23 @@
 </script>
 
 {#if isVisible}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="overlay-backdrop" onclick={handleBackdropClick}>
+  <dialog
+    bind:this={dialogEl}
+    class="overlay-dialog"
+    aria-modal="true"
+    aria-labelledby="text-input-dialog-title"
+    aria-describedby="text-input-dialog-instructions"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={handleDialogKeyDown}
+    oncancel={handleDialogCancel}
+  >
     <div class="input-container">
+      <h2 id="text-input-dialog-title">{t('text.dialogTitle')}</h2>
+      <p id="text-input-dialog-instructions" class="visually-hidden">{t('text.instructions')}</p>
+      <label for="text-input-overlay-field" class="text-input-label">{t('text.inputLabel')}</label>
       <textarea
+        id="text-input-overlay-field"
         bind:this={textareaEl}
         bind:value={inputText}
         onkeydown={handleKeyDown}
@@ -90,53 +168,82 @@
         class="text-input"
         style="font-size: {Math.min(fontSize, 32)}px"
       ></textarea>
-      <div class="font-size-row">
-        <span class="font-size-label">{t('sheet.size')}</span>
+      <fieldset class="font-size-row">
+        <legend class="font-size-label">{t('text.fontSizeGroup')}</legend>
         {#each fontSizePresets as size}
           <button
+            type="button"
             class="font-size-chip"
             class:active={fontSize === size}
             onclick={() => onFontSizeChange?.(size)}
+            aria-label={t('text.fontSizeOption', { size })}
+            aria-pressed={fontSize === size}
           >
             {size}
           </button>
         {/each}
-      </div>
+      </fieldset>
       <div class="button-row">
-        <button class="btn cancel-btn" onclick={handleCancel}>
+        <button type="button" class="btn cancel-btn" onclick={handleCancel}>
           {t('common.cancel')}
         </button>
-        <button class="btn confirm-btn" onclick={handleConfirm}>
+        <button type="button" class="btn confirm-btn" onclick={handleConfirm}>
           {t('common.confirm')}
         </button>
       </div>
     </div>
-  </div>
+  </dialog>
 {/if}
 
 <style>
-  .overlay-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+  .overlay-dialog {
+    width: min(480px, calc(100vw - 48px));
+    max-width: none;
+    max-height: calc(100vh - 48px);
+    margin: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+  }
+
+  .overlay-dialog::backdrop {
     background: var(--color-surface-overlay);
-    z-index: var(--z-text-modal-backdrop);
   }
 
   .input-container {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: calc(100vw - 48px);
-    max-width: 480px;
+    width: 100%;
     background: var(--color-surface);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
     padding: var(--space-4);
-    z-index: var(--z-text-modal);
+  }
+
+  .input-container h2 {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xl);
+  }
+
+  .text-input-label {
+    display: block;
+    margin-bottom: var(--space-1_5);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .text-input {
@@ -149,8 +256,9 @@
     min-height: 80px;
   }
 
-  .text-input:focus {
-    outline: none;
+  .text-input:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
     border-color: var(--color-primary);
     box-shadow: var(--shadow-focus-soft);
   }
@@ -160,12 +268,15 @@
     align-items: center;
     gap: var(--space-1_5);
     margin-top: var(--space-2);
+    padding: 0;
+    border: 0;
   }
 
   .font-size-label {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     margin-right: var(--space-0_5);
+    padding: 0;
   }
 
   .font-size-chip {
@@ -180,8 +291,8 @@
   }
 
   .font-size-chip.active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
+    background: var(--color-primary-strong-hover);
+    border-color: var(--color-primary-strong-hover);
     color: var(--color-text-inverse);
     font-weight: var(--font-weight-semibold);
   }
@@ -189,6 +300,12 @@
   .font-size-chip:hover:not(.active) {
     border-color: var(--color-primary);
     color: var(--color-primary);
+  }
+
+  .font-size-chip:focus-visible,
+  .btn:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .button-row {
@@ -215,13 +332,13 @@
   }
 
   .confirm-btn {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
+    background: var(--color-primary-strong-hover);
+    border-color: var(--color-primary-strong-hover);
     color: var(--color-text-inverse);
   }
 
   .confirm-btn:hover {
-    background: var(--color-primary-hover);
-    border-color: var(--color-primary-hover);
+    background: var(--color-primary-strong-hover);
+    border-color: var(--color-primary-strong-hover);
   }
 </style>

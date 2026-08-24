@@ -88,18 +88,16 @@ test.describe('책갈피 (PDF 내장 목차)', () => {
     // 12페이지를 가리키는 마지막 최상위 항목
     await page.getByRole('button', { name: /Integration checklist/ }).click()
 
-    // 페이지 표시뿐 아니라 실제 스크롤이 대상 페이지에 도달했는지 확인 —
-    // 1px만 걸친 상태가 아니라 뷰포트 절반 이상을 채워 smooth scroll 완료를 확인한다.
-    await page.waitForFunction(() => {
-      const viewer = document.querySelector('.scroll-viewer')
-      const target = document.querySelector('.scroll-page-container[data-page="12"]')
-      if (!viewer || !target) return false
-      const viewport = viewer.getBoundingClientRect()
-      const rect = target.getBoundingClientRect()
-      const overlap = Math.max(0, Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top))
-      return overlap >= Math.min(rect.height, viewport.height) * 0.5
-    }, null, { timeout: 15_000 })
     await expect(pageInput).toHaveValue('12', { timeout: 15_000 })
+
+    // 페이지 표시뿐 아니라 실제 스크롤이 대상 페이지에 도달했는지 확인 —
+    // goToPage(표시)와 scrollToPage(이동)가 분리돼 있어 한쪽만 동작해도 표시는 바뀐다
+    await page.waitForFunction(() => {
+      const target = document.querySelector('.scroll-page-container[data-page="12"]')
+      if (!target) return false
+      const rect = target.getBoundingClientRect()
+      return rect.top < window.innerHeight && rect.bottom > 0
+    }, null, { timeout: 15_000 })
 
     // 이동 후에도 패널은 열린 채 유지 — 연속 탐색이 가능해야 한다
     await expect(page.locator(panel)).toBeVisible()

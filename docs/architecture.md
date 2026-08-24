@@ -104,6 +104,10 @@ Paper.js item
 포맷은 구현 버전과 함께 진화할 수 있으므로 호스트가 JSON 필드를 직접 수정하거나
 부분 병합하지 않는 것이 안전합니다.
 
+PDF.js 네이티브 양식 값은 문서 단위 `annotationStorage`에 있고,
+`exportPdf()`가 `saveDocument()` 결과를 별도 `ArrayBuffer`로 반환합니다.
+이 바이너리 경로와 Paper.js `canvasData` 경로는 서로 합성하지 않습니다.
+
 ## 통합 보안 모델
 
 - SDK는 iframe의 `contentWindow`와 예상 origin이 일치하는 메시지만 처리합니다.

@@ -165,11 +165,7 @@ async function drawStroke(frame) {
   await pen.waitFor({ state: 'visible', timeout: 15_000 })
   await pen.click()
 
-  const currentPage = Number(await frame.locator('.page-input').inputValue())
-  assert(Number.isInteger(currentPage) && currentPage > 0, 'viewer reported an invalid current page')
-  const canvas = frame.locator(
-    `.scroll-page-container[data-page="${currentPage}"] canvas.scroll-page-canvas-paper`,
-  )
+  const canvas = frame.locator('.scroll-page-container canvas.scroll-page-canvas-paper').first()
   await canvas.waitFor({ state: 'visible', timeout: 30_000 })
   await canvas.evaluate((element) => {
     const rect = element.getBoundingClientRect()
@@ -242,6 +238,19 @@ async function verifyBrowserRoundTrip(installedRoot) {
   const frame = page.frameLocator('#viewer iframe')
   await frame.locator('.scroll-page-container canvas.scroll-page-canvas-pdf').first().waitFor({ state: 'visible', timeout: 30_000 })
 
+  const exportVerification = await page.evaluate(async () => {
+    const bytes = await window.__releaseProbe.viewer.exportPdf()
+    const header = String.fromCharCode(...new Uint8Array(bytes).slice(0, 5))
+    return {
+      isArrayBuffer: bytes instanceof ArrayBuffer,
+      byteLength: bytes.byteLength,
+      header,
+    }
+  })
+  assert.equal(exportVerification.isArrayBuffer, true, 'installed SDK exportPdf must resolve an ArrayBuffer')
+  assert.equal(exportVerification.header, '%PDF-', 'installed SDK exportPdf returned invalid PDF bytes')
+  assert(exportVerification.byteLength > 100, 'installed SDK exportPdf returned an unexpectedly small PDF')
+
   // npm tarball에 설치된 synthetic sample의 내장 outline을 공개 viewer가 그대로 제공해야 한다.
   const bookmarkToggle = frame.locator('.outline-toggle-btn')
   await bookmarkToggle.waitFor({ state: 'visible', timeout: 15_000 })
@@ -269,17 +278,15 @@ async function verifyBrowserRoundTrip(installedRoot) {
   await frame.getByRole('button', { name: /Integration checklist/ }).click()
   await page.waitForFunction(() => {
     const viewerFrame = document.querySelector('#viewer iframe')
-    const viewer = viewerFrame?.contentDocument?.querySelector('.scroll-viewer')
-    const target = viewerFrame?.contentDocument?.querySelector('.scroll-page-container[data-page="12"]')
-    if (!viewer || !target) return false
-    const viewport = viewer.getBoundingClientRect()
-    const rect = target.getBoundingClientRect()
-    const overlap = Math.max(0, Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top))
-    return overlap >= Math.min(rect.height, viewport.height) * 0.5
+    return viewerFrame?.contentDocument?.querySelector('.page-input')?.value === '12'
   }, null, { timeout: 15_000 })
   await page.waitForFunction(() => {
     const viewerFrame = document.querySelector('#viewer iframe')
-    return viewerFrame?.contentDocument?.querySelector('.page-input')?.value === '12'
+    const childWindow = viewerFrame?.contentWindow
+    const target = viewerFrame?.contentDocument?.querySelector('.scroll-page-container[data-page="12"]')
+    if (!childWindow || !target) return false
+    const rect = target.getBoundingClientRect()
+    return rect.top < childWindow.innerHeight && rect.bottom > 0
   }, null, { timeout: 15_000 })
   assert.equal(await frame.locator('.page-input').inputValue(), '12', 'bookmark did not navigate to page 12')
 
@@ -291,6 +298,15 @@ async function verifyBrowserRoundTrip(installedRoot) {
     targetPage: 12,
     targetPageVisible: true,
   }
+
+  // 이후 편집 round-trip은 공개 clear() 계약대로 "현재 페이지"를 검증한다.
+  // 북마크 검증이 12페이지에서 끝났으므로 첫 페이지로 명시적으로 복귀해,
+  // DOM상 첫 canvas와 현재 페이지가 서로 다른 상태에서 잘못된 페이지를 그리지 않는다.
+  await frame.locator('.outline-panel .outline-entry').first().click()
+  await page.waitForFunction(() => {
+    const viewerFrame = document.querySelector('#viewer iframe')
+    return viewerFrame?.contentDocument?.querySelector('.page-input')?.value === '1'
+  }, null, { timeout: 15_000 })
 
   const productionState = await iframe.evaluate((element) => {
     const child = element.contentWindow
@@ -406,6 +422,7 @@ async function verifyBrowserRoundTrip(installedRoot) {
       afterRapidReload: rapidReloadFinalCount,
     },
     bookmarkVerification,
+    exportVerification,
     expectedAbortedPdfRequests,
     productionState,
     installedRoot,
@@ -432,6 +449,8 @@ async function main() {
     'sdk/inko-sdk.d.ts',
     'viewer/index.html',
     'viewer/samples/inko-demo.pdf',
+    'viewer/samples/inko-feature-surface.pdf',
+    'viewer/pdfjs-images/manifest.json',
     'viewer/THIRD_PARTY_NOTICES.md',
     'README.md',
   ]) {

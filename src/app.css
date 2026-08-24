@@ -234,8 +234,10 @@
 
   /* === Z-index 위계 (PDF·오버레이·Paper.js·UI 패널) === */
   --z-pdf: 10;
+  --z-pdf-text: 11;
   --z-overlay: 20;
   --z-paper: 30;
+  --z-pdf-annotation: 40;
   --z-history-panel: 990;       /* 우측 이력 패널 — 시트보다 아래 */
   --z-text-modal-backdrop: 1000;/* 텍스트 입력 모달 backdrop */
   --z-text-modal: 1001;         /* 텍스트 입력 모달 본체 */
@@ -339,7 +341,7 @@ button:focus {
   outline-offset: 2px;
 }
 
-/* ===== Scrollbar styling (Galaxy Tab touch-friendly) ===== */
+/* ===== Scrollbar styling (touch-friendly) ===== */
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
@@ -359,14 +361,14 @@ button:focus {
   background: var(--gray-500);
 }
 
-/* ===== Touch optimization (Galaxy Tab 기본값) ===== */
+/* ===== Touch-device optimization ===== */
 button {
   min-height: 48px;
   min-width: 48px;
   touch-action: manipulation;
 }
 
-/* ===== Galaxy Tab S9 FE+ Optimization ===== */
+/* ===== 중간 크기 터치 디바이스 최적화 ===== */
 /* Target: 2560x1600, 12.4 inch display */
 
 /* GPU acceleration for scroll containers */

@@ -58,6 +58,15 @@ assert.equal(
   '586ECCCEA5D466F910298B76BFF20B17325F477D5D4CDA06F5AF613FF2387B0D',
   'synthetic PDF fixture changed without provenance review'
 )
+assert.ok(
+  existsSync(resolve(root, 'scripts/fixtures/generate-pdf-feature-surface.py')),
+  'native text/search/form fixture generator must ship with the source'
+)
+assert.equal(
+  sha256(resolve(root, 'public/samples/inko-feature-surface.pdf')),
+  'BA4C241F893CE938481C69C62204ABA5EB67333B52F8DD0D281BFB383070561C',
+  'native text/search/form PDF fixture changed without provenance review'
+)
 
 const liberationHashes = {
   'LiberationSans-Regular.ttf': '76D04C18EA243F426B7DE1F3AD208E927008F961DC5945E5AAD352D0DFDE8EE8',
@@ -91,6 +100,43 @@ for (const name of readdirSync(publicStandardFonts).filter((name) => /^Foxit|^LI
 assertMirrorsLockedPackage(
   resolve(root, 'public/cmaps'),
   resolve(root, 'node_modules/pdfjs-dist/cmaps')
+)
+
+const annotationIconDir = resolve(root, 'public/pdfjs-images')
+const annotationIconUpstreamDir = resolve(root, 'node_modules/pdfjs-dist/web/images')
+const annotationIconManifest = JSON.parse(
+  readFileSync(resolve(annotationIconDir, 'manifest.json'), 'utf8')
+)
+assert.equal(annotationIconManifest.source?.package, 'pdfjs-dist')
+assert.equal(
+  annotationIconManifest.source?.version,
+  String(packageJson.dependencies?.['pdfjs-dist'] ?? '').replace(/^[~^]/, ''),
+  'PDF.js annotation icon version differs from the locked dependency declaration'
+)
+const annotationIconNames = readdirSync(annotationIconDir)
+  .filter((name) => /^annotation-.*\.svg$/.test(name))
+  .sort()
+assert.deepEqual(
+  annotationIconNames,
+  readdirSync(annotationIconUpstreamDir).filter((name) => /^annotation-.*\.svg$/.test(name)).sort(),
+  'PDF.js annotation icon file list drift'
+)
+for (const name of annotationIconNames) {
+  assert.equal(
+    sha256(resolve(annotationIconDir, name)),
+    sha256(resolve(annotationIconUpstreamDir, name)),
+    `${name} differs from locked pdfjs-dist`
+  )
+  assert.equal(
+    annotationIconManifest.files?.[name]?.toUpperCase(),
+    sha256(resolve(annotationIconDir, name)),
+    `${name} manifest hash drift`
+  )
+}
+assert.equal(
+  sha256(resolve(annotationIconDir, 'LICENSE.pdfjs-dist')),
+  sha256(resolve(root, 'node_modules/pdfjs-dist/LICENSE')),
+  'PDF.js annotation icon license differs from locked dependency'
 )
 
 const normalizeWorker = (text) => text
@@ -146,6 +192,8 @@ if (existsSync(distDir)) {
     'mock or rights-unknown PDF leaked into dist'
   )
   assert.ok(names.includes('samples/inko-demo.pdf'), 'synthetic fixture missing from dist')
+  assert.ok(names.includes('samples/inko-feature-surface.pdf'), 'native feature fixture missing from dist')
+  assert.ok(names.includes('pdfjs-images/manifest.json'), 'PDF.js annotation icon manifest missing from dist')
 
   const executableFiles = files
     .filter((path) => /\.(?:html|js|mjs)$/.test(path))

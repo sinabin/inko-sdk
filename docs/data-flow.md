@@ -59,6 +59,12 @@ sequenceDiagram
 debounce하는 것이 좋습니다. `save()`는 저장소에 직접 쓰지 않고 현재 상태를
 `onSave`에 반환합니다.
 
+네이티브 AcroForm을 PDF 바이트로 저장하는 경로는 `canvasData`와 분리됩니다.
+`viewer.exportPdf()`는 request ID를 포함한 `exportPdf` 메시지를 보내고,
+뷰어가 PDF.js `saveDocument()` 결과를 `exportPdfResponse`의 transferable
+`ArrayBuffer`로 돌려주면 해당 Promise만 완료합니다. Paper.js 편집 상태는 이
+응답에 포함되지 않습니다.
+
 ## 저장 상태 복원
 
 ```mermaid
@@ -138,12 +144,14 @@ sequenceDiagram
 | SDK → 뷰어 | `loadPdfFromUrl` | URL PDF와 선택적 상태 로드 |
 | SDK → 뷰어 | `loadUserCanvasData` | 검토본 레이어 목록 로드 |
 | SDK → 뷰어 | `saveCanvas` | 현재 문서 상태 요청 |
+| SDK → 뷰어 | `exportPdf` | request ID 기반 네이티브 PDF 바이트 요청 |
 | SDK → 뷰어 | `clearCurrentCanvas` | 현재 페이지 편집 상태 초기화 |
 | SDK → 뷰어 | `applyConfig` | 테마·도구·언어 부분 갱신 |
 | 뷰어 → SDK | `viewerReady` | 연결 준비 완료 |
 | 뷰어 → SDK | `pdfLoaded` | PDF 로드 완료 |
 | 뷰어 → SDK | `canvasDataChanged` | 편집 상태 변경 |
 | 뷰어 → SDK | `saveCanvasResponse` | 저장 요청 결과 |
+| 뷰어 → SDK | `exportPdfResponse` | 같은 request ID의 PDF `ArrayBuffer` 결과 |
 | 뷰어 → SDK | `closeViewer` | 닫기 요청 |
 | 뷰어 → SDK | `setOrientation` | 방향 변경 요청 |
 

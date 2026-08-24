@@ -63,6 +63,9 @@ corresponding rows to the bundled-component table.
   remains intact.
 - `cmaps/*.bcmap` comes from `pdfjs-dist` 5.4.624. Adobe's redistribution
   notice is at `cmaps/LICENSE`.
+- `pdfjs-images/annotation-*.svg` comes from `pdfjs-dist` 5.4.624. The
+  Apache-2.0 license copy is at `pdfjs-images/LICENSE.pdfjs-dist`, and the
+  byte-level integrity manifest is at `pdfjs-images/manifest.json`.
 - `standard_fonts/Foxit*.pfb` comes from `pdfjs-dist` 5.4.624. Its
   redistribution terms are at `standard_fonts/LICENSE_FOXIT`.
 - `standard_fonts/LiberationSans-*.ttf` comes from the official Liberation

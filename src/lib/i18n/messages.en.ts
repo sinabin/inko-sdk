@@ -12,6 +12,12 @@ export const en: Record<string, string> = {
   'tool.text': 'Text',
 
   // Toolbar
+  'toolbar.label': 'PDF toolbar',
+  'toolbar.navigationGroup': 'Page navigation',
+  'toolbar.editHistoryGroup': 'Undo and redo',
+  'toolbar.zoomGroup': 'View and zoom',
+  'toolbar.toolsGroup': 'Annotation tools',
+  'toolbar.actionsGroup': 'Document actions',
   'toolbar.thumbnailsHide': 'Hide thumbnails',
   'toolbar.thumbnailsShow': 'Show thumbnails',
   'toolbar.prevPage': 'Previous page',
@@ -21,6 +27,7 @@ export const en: Record<string, string> = {
   'toolbar.redo': 'Redo',
   'toolbar.zoomOut': 'Zoom out',
   'toolbar.zoomIn': 'Zoom in',
+  'toolbar.zoomLevel': 'Zoom {percent}%',
   'toolbar.orientationLandscape': 'Landscape view',
   'toolbar.orientationPortrait': 'Portrait view',
   'toolbar.deleteSelection': 'Delete selection',
@@ -50,11 +57,19 @@ export const en: Record<string, string> = {
   'history.unknownUser': 'Unknown',
   'history.hideUser': 'Hide {name}',
   'history.showUser': 'Show {name}',
+  'history.close': 'Close history',
+  'history.layerVisibility': 'Show {name} layer',
+  'history.currentVersion': 'Currently editing',
+  'history.continueEditLabel': 'Continue editing the {date} version by {name}',
 
   // Common
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',
+  'common.close': 'Close',
   'common.closeNotification': 'Dismiss notification',
+
+  // Notification region
+  'error.notifications': 'Notifications',
 
   // Tool option sheets
   'sheet.color': 'Color',
@@ -65,12 +80,18 @@ export const en: Record<string, string> = {
   'sheet.customColor': 'Custom color',
   'sheet.customColorPick': 'Pick custom color',
   'sheet.dialogLabel': '{header} settings',
+  'sheet.closeLabel': 'Close {header} settings',
   'sheet.colorSwatch': 'Color {color}',
   'sheet.widthSwatch': '{label} {n}px',
   'sheet.textPreviewSample': 'AaBbCc Gg',
 
   // Text input
   'text.placeholder': 'Enter text...',
+  'text.dialogTitle': 'Enter text',
+  'text.inputLabel': 'Text to add',
+  'text.instructions': 'Press Enter to confirm, Shift+Enter for a new line, or Escape to cancel.',
+  'text.fontSizeGroup': 'Font size',
+  'text.fontSizeOption': 'Font size {size}px',
 
   // Toast categories
   'error.categoryParse': 'Data',
@@ -90,10 +111,15 @@ export const en: Record<string, string> = {
   'viewer.encodeFailed': 'Failed to encode save data',
 
   // Thumbnails
+  'thumbnails.navigationLabel': 'PDF page thumbnails',
+  'thumbnails.listLabel': 'Page list',
   'thumbnails.noPdf': 'No PDF loaded',
   'thumbnails.loadingList': 'Loading thumbnails... ({n}/{total})',
   'thumbnail.loading': 'Loading...',
   'thumbnail.error': 'Error',
   'thumbnail.pageLabel': 'Page {n}',
+  'thumbnail.currentPageLabel': 'Page {n}, current page',
+  'thumbnail.pageLoadingLabel': 'Loading thumbnail for page {n}',
+  'thumbnail.pageErrorLabel': 'Thumbnail error on page {n}',
   'thumbnail.contextError': 'Failed to create 2D context',
 }

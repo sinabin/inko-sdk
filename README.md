@@ -17,6 +17,9 @@ to make the implementation and its limits directly verifiable.
 ## What Inko provides
 
 - PDF rendering powered by PDF.js
+- Native PDF text selection/copy plus Unicode literal search across virtualized pages
+- PDF.js native annotations, safe internal/external links, and AcroForm display/input
+- `exportPdf()` for an `ArrayBuffer` containing current AcroForm values
 - Pen, highlighter, eraser, text, shape, selection, zoom, and thumbnail tools
 - A bookmark panel built from the PDF's embedded outline, shown only when the
   document actually carries one
@@ -25,6 +28,12 @@ to make the implementation and its limits directly verifiable.
 - Exactly-one version-history selection when one overlay entry declares `isCurrent: true`
 - A browser/iframe SDK exposed through `Inko.mount()`
 - Theme, tool, and Korean/English UI configuration
+
+The viewer uses PDF.js's public `TextLayerBuilder` and `AnnotationLayerBuilder`
+with one document-level `annotationStorage`, keeps high-DPI canvas rendering and
+DOM layers on the same logical viewport, and virtualizes offscreen pages. These
+are the same classes of rendering, text, form-state, and lifecycle concerns
+expected from a production PDF integration, while remaining inspectable OSS.
 
 Inko does **not** provide a server-side repository, authentication,
 authorization, version numbering, append-only storage, backup, retention,
@@ -67,8 +76,16 @@ cp node_modules/inko-pdf-sdk/sdk/inko-sdk.js public/inko-sdk.js
       console.error(error)
     },
   })
+
+  // Separate binary path: native AcroForm values are written into PDF bytes.
+  const pdfBytes = await viewer.exportPdf()
 </script>
 ```
+
+`canvasData` and `exportPdf()` are deliberately separate contracts.
+`canvasData` preserves Inko's editable Paper.js drawing/review state;
+`exportPdf()` returns PDF.js `saveDocument()` bytes with native AcroForm state.
+It does not flatten or merge Inko drawings into the PDF.
 
 For cross-origin iframe deployments, configure `VITE_ALLOWED_ORIGINS` at build
 time and apply the required HTTP CSP/CORS headers in the host environment. See
