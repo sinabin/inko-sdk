@@ -23,12 +23,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan full history for secrets
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: 'false'
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -47,6 +41,12 @@ jobs:
           if [ "$GITHUB_REPOSITORY" != "sinabin/Inko" ]; then
             node scripts/release/verify-public-tree.mjs
           fi
+
+      - name: Scan full history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
 
       - name: Audit high-severity dependency findings
         run: |
