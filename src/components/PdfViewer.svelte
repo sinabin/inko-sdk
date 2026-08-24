@@ -721,6 +721,18 @@
   // 목차 추출 세대 토큰 — 연속 로드 시 이전 문서의 추출 결과가 뒤늦게 덮어쓰는 것을 차단
   let outlineToken = 0
 
+  /**
+   * 브라우저가 한가해질 때까지 양보 — 목차 추출은 부가 기능이므로
+   * 첫 페이지 렌더(호스트가 pdfLoaded를 기다리는 임계 경로)보다 뒤로 물러난다.
+   */
+  function whenIdle(timeoutMs = 2000): Promise<void> {
+    return new Promise((resolve) => {
+      const ric = (window as any).requestIdleCallback
+      if (typeof ric === 'function') ric(() => resolve(), { timeout: timeoutMs })
+      else setTimeout(resolve, 0)
+    })
+  }
+
   /** PDF 로드 후 내장 목차 추출 — 실패·부재는 빈 목록으로 수렴(로드 자체를 실패시키지 않음) */
   async function refreshOutline(): Promise<void> {
     const token = ++outlineToken
@@ -735,6 +747,9 @@
 
     isOutlineLoading = true
     try {
+      // 첫 페이지 렌더가 pdf.js 워커를 먼저 쓰도록 양보한 뒤 추출한다
+      await whenIdle()
+      if (token !== outlineToken) return
       const extracted = await extractOutline(doc)
       if (token !== outlineToken) return
       outline = extracted

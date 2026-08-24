@@ -152,9 +152,17 @@ if (existsSync(distDir)) {
     .map((path) => ({ path, text: readFileSync(path, 'utf8') }))
   const executableText = executableFiles.map(({ text }) => text).join('\n')
   assert.doesNotMatch(executableText, /__bridgeMock|pdfv_canvas_history:/)
+  // 호스트 전용 식별자 — 철자가 충분히 특이해 대소문자 무시로 넓게 잡는다.
   assert.doesNotMatch(
     executableText,
-    /window\.conn|PdfViewerPOP|odcId|odcName|USER_NM|USER_ID|REG_DT|CANVAS_ID|SmartOn|SVN/iu,
+    /window\.conn|PdfViewerPOP|odcId|odcName|USER_NM|USER_ID|REG_DT|CANVAS_ID|SmartOn/iu,
+    'host-specific compatibility code leaked into dist',
+  )
+  // SVN은 세 글자라 대소문자를 무시하면 Vite 콘텐츠 해시(예: index-BY4svn44.js)에
+  // 우연히 걸린다. 호스트 코드가 쓰는 형태인 대문자 단어로만 검사한다.
+  assert.doesNotMatch(
+    executableText,
+    /SVN/u,
     'host-specific compatibility code leaked into dist',
   )
   for (const { path, text } of executableFiles) {

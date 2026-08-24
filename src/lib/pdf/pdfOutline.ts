@@ -80,7 +80,9 @@ export async function extractOutline(doc: OutlineSourceDocument | null): Promise
   async function walk(items: unknown[], depth: number, path: string): Promise<PdfOutlineNode[]> {
     if (depth >= MAX_OUTLINE_DEPTH) return []
 
-    const nodes: PdfOutlineNode[] = []
+    // 형제 항목은 병렬로 해석 — 목적지 해석은 pdf.js 워커 왕복이라
+    // 순차 처리하면 항목 수만큼 지연이 누적되고 페이지 렌더와 오래 경쟁한다.
+    const pending: Array<Promise<PdfOutlineNode>> = []
     for (let i = 0; i < items.length; i++) {
       if (remaining <= 0) break
       const item = items[i] as RawOutlineItem
@@ -88,20 +90,23 @@ export async function extractOutline(doc: OutlineSourceDocument | null): Promise
       remaining--
 
       const id = path ? `${path}.${i}` : String(i)
-      const page = await resolveDestinationPage(doc!, item.dest)
-      const children = Array.isArray(item.items)
-        ? await walk(item.items, depth + 1, id)
-        : []
-
-      nodes.push({
-        id,
-        title: normalizeTitle(item.title),
-        page,
-        depth,
-        children
-      })
+      pending.push(
+        (async () => {
+          const [page, children] = await Promise.all([
+            resolveDestinationPage(doc!, item.dest),
+            Array.isArray(item.items) ? walk(item.items, depth + 1, id) : Promise.resolve([])
+          ])
+          return {
+            id,
+            title: normalizeTitle(item.title),
+            page,
+            depth,
+            children
+          }
+        })()
+      )
     }
-    return nodes
+    return Promise.all(pending)
   }
 
   return walk(raw, 0, '')
