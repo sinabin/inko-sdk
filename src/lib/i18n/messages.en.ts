@@ -3,6 +3,7 @@
 export const en: Record<string, string> = {
   // Tools
   'tool.select': 'Select',
+  'tool.contentSelect': 'Select PDF content',
   'tool.pen': 'Pen',
   'tool.highlighter': 'Highlighter',
   'tool.eraser': 'Eraser',
@@ -39,6 +40,7 @@ export const en: Record<string, string> = {
 
   // Document search
   'search.region': 'PDF search',
+  'search.open': 'Search PDF (Ctrl/⌘+F)',
   'search.input': 'Find in document',
   'search.placeholder': 'Enter search text',
   'search.previous': 'Previous search result',

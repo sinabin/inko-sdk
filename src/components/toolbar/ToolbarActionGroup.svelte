@@ -4,28 +4,54 @@
   import { toolbarRovingGroup } from '../../lib/accessibility/toolbarRoving'
 
   interface Props {
+    showSearch: boolean
+    isSearchOpen: boolean
     showHistory: boolean
     isHistoryPanelVisible: boolean
     showSave: boolean
+    onToggleSearch?: () => void
     onToggleHistory?: () => void
     onSave?: () => void
   }
 
   let {
+    showSearch,
+    isSearchOpen,
     showHistory,
     isHistoryPanelVisible,
     showSave,
+    onToggleSearch,
     onToggleHistory,
     onSave
   }: Props = $props()
 </script>
 
 <div
-  class="toolbar-section inko-toolbar-section actions"
+  class="toolbar-section inko-toolbar-section inko-toolbar-section--divided actions"
   role="group"
   aria-label={t('toolbar.actionsGroup')}
   use:toolbarRovingGroup
 >
+  {#if showSearch}
+    <button
+      type="button"
+      data-testid="pdf-search-open"
+      class="btn inko-toolbar-button search-btn"
+      class:active={isSearchOpen}
+      onclick={onToggleSearch}
+      title={t('search.open')}
+      aria-label={t('search.region')}
+      aria-expanded={isSearchOpen}
+      aria-controls="inko-pdf-search"
+      aria-keyshortcuts="Control+F Meta+F"
+    >
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10.5" cy="10.5" r="6.5"/>
+        <line x1="15.2" y1="15.2" x2="21" y2="21"/>
+      </svg>
+    </button>
+  {/if}
+
   {#if showHistory}
     <button
       type="button"
@@ -60,6 +86,27 @@
 <style>
   .actions {
     margin-left: auto;
+  }
+
+  .search-btn {
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    color: var(--color-text-tool);
+  }
+
+  .search-btn.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    box-shadow: var(--shadow-tool-active);
+  }
+
+  .search-btn.active:hover:not(:disabled),
+  .search-btn.active:active:not(:disabled) {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-text-inverse);
   }
 
   .history-btn {
@@ -156,6 +203,7 @@
   }
 
   @media (orientation: landscape) {
+    .search-btn,
     .history-btn {
       width: 36px;
       height: 36px;

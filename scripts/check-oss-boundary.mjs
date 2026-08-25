@@ -172,14 +172,35 @@ assert.equal(
   'PDF.js annotation icon license differs from locked dependency'
 )
 
-const normalizeWorker = (text) => text
+const workerModificationNotice =
+  '/* Modified by NextH for Inko in 2026: removed the upstream sourceMappingURL trailer. No executable code was changed. */'
+const publicWorker = readFileSync(resolve(root, 'public/pdf.worker.mjs'), 'utf8')
   .replaceAll('\r\n', '\n')
+const upstreamWorker = readFileSync(
+  resolve(root, 'node_modules/pdfjs-dist/build/pdf.worker.mjs'),
+  'utf8',
+).replaceAll('\r\n', '\n')
+assert.equal(
+  publicWorker.split(workerModificationNotice).length - 1,
+  1,
+  'pdf.worker.mjs must carry exactly one prominent modification notice',
+)
+const workerLicenseHeaderEnd = ' * JavaScript code in this page\n */\n\n'
+assert.equal(
+  publicWorker.indexOf(workerModificationNotice),
+  publicWorker.indexOf(workerLicenseHeaderEnd) + workerLicenseHeaderEnd.length,
+  'pdf.worker.mjs modification notice must immediately follow the Apache license header',
+)
+const normalizedPublicWorker = publicWorker
+  .replace(`${workerModificationNotice}\n\n`, '')
+  .trimEnd()
+const normalizedUpstreamWorker = upstreamWorker
   .replace(/^\/\/# sourceMappingURL=pdf\.worker\.mjs\.map\s*$/m, '')
   .trimEnd()
 assert.equal(
-  normalizeWorker(readFileSync(resolve(root, 'public/pdf.worker.mjs'), 'utf8')),
-  normalizeWorker(readFileSync(resolve(root, 'node_modules/pdfjs-dist/build/pdf.worker.mjs'), 'utf8')),
-  'pdf.worker.mjs differs from locked pdfjs-dist beyond the removed source map comment'
+  normalizedPublicWorker,
+  normalizedUpstreamWorker,
+  'pdf.worker.mjs differs from locked pdfjs-dist beyond the declared notice and removed source map comment',
 )
 assert.ok(existsSync(resolve(root, 'public/THIRD_PARTY_NOTICES.md')), 'third-party notice required')
 

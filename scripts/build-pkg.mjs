@@ -72,7 +72,7 @@ for (const file of packageDocs) {
 const releasePackage = {
   name: sourcePackage.name,
   version,
-  description: 'Self-hosted PDF editing-state SDK with outline bookmarks, review overlays, and resumable editing.',
+  description: 'Self-hosted PDF SDK with outline bookmarks, review overlays, editing-state export/restore, and host-managed storage.',
   main: 'sdk/inko-sdk.js',
   types: 'sdk/inko-sdk.d.ts',
   files: [

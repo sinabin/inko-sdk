@@ -3,6 +3,7 @@
 export const ko: Record<string, string> = {
   // 도구
   'tool.select': '선택',
+  'tool.contentSelect': 'PDF 내용 선택',
   'tool.pen': '펜',
   'tool.highlighter': '형광펜',
   'tool.eraser': '지우개',
@@ -39,6 +40,7 @@ export const ko: Record<string, string> = {
 
   // 문서 검색
   'search.region': 'PDF 검색',
+  'search.open': 'PDF 검색 (Ctrl/⌘+F)',
   'search.input': '문서에서 찾기',
   'search.placeholder': '검색어 입력',
   'search.previous': '이전 검색 결과',

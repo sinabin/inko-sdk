@@ -690,6 +690,7 @@
     currentTool={currentTool}
     currentPage={pageNav.currentPage}
     totalPages={pageNav.totalPages}
+    hasPdfDocument={pdfLoader.document !== null}
     scale={interaction.scale}
     isReadOnly={isReadOnly}
     enabledTools={enabledTools}
@@ -719,6 +720,8 @@
     onZoomOut={() => interaction.zoomAnchoredTo(interaction.scale - interaction.step)}
     onSave={handleSave}
     onToggleHistory={handleToggleHistory}
+    isSearchOpen={isSearchOpen}
+    onToggleSearch={() => isSearchOpen ? closePdfSearch() : openPdfSearch()}
     hasSelection={hasSelection}
     onDeleteSelected={handleDeleteSelected}
   />
@@ -735,29 +738,8 @@
         <p>오류: {pdfLoader.error}</p>
       </div>
     {:else if pdfLoader.document}
-      <div class="pdf-native-controls" role="group" aria-label="PDF 내용 도구">
-        {#if isToolEnabled('contentSelect')}
-          <button
-            type="button"
-            data-tool="contentSelect"
-            class:active={isReadOnly || currentTool === 'contentSelect'}
-            aria-pressed={isReadOnly || currentTool === 'contentSelect'}
-            aria-label="PDF 텍스트 및 양식 선택"
-            title="PDF 텍스트 및 양식 선택"
-            onclick={() => handleToolChange('contentSelect')}
-          >내용 선택</button>
-        {/if}
-
-        {#if toolFeatures.search !== false}
-          {#if !isSearchOpen}
-            <button
-              type="button"
-              data-testid="pdf-search-open"
-              aria-label="PDF 검색"
-              title="PDF 검색 (Ctrl/⌘+F)"
-              onclick={openPdfSearch}
-            >검색</button>
-          {/if}
+      {#if toolFeatures.search !== false}
+        <div id="inko-pdf-search" class="pdf-search-popover">
           <PdfSearchBar
             open={isSearchOpen}
             query={searchQuery}
@@ -767,8 +749,8 @@
             onNext={handleSearchNext}
             onClose={closePdfSearch}
           />
-        {/if}
-      </div>
+        </div>
+      {/if}
       {#if showThumbnails && toolFeatures.thumbnails !== false}
         <PdfThumbnailList
           pdfDocument={pdfLoader.document}
@@ -886,41 +868,20 @@
     position: relative;
   }
 
-  .pdf-native-controls {
+  .pdf-search-popover {
     position: absolute;
     top: var(--space-2);
     right: var(--space-3);
     z-index: 980;
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
     max-width: calc(100% - var(--space-6));
   }
 
-  .pdf-native-controls > button {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-sm);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .pdf-native-controls > button:hover,
-  .pdf-native-controls > button.active {
-    border-color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
-  }
-
-  .pdf-native-controls > button:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+  @media (max-width: 560px) {
+    .pdf-search-popover {
+      left: var(--space-1);
+      right: var(--space-1);
+      max-width: none;
+    }
   }
 
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -928,6 +889,10 @@
       margin-top: -16px;
       padding-top: 16px;
       box-sizing: border-box;
+    }
+
+    .pdf-search-popover {
+      top: calc(var(--space-4) + var(--space-2));
     }
   }
 

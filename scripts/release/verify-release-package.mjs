@@ -58,6 +58,14 @@ for (const path of paths) {
   assert.doesNotMatch(path, /\.map$/)
   assert.doesNotMatch(path, /androidBridge|(?:^|\/)test\.pdf$|pdf 테스트\.pdf/i)
 }
+assert.deepEqual(
+  paths.filter((path) => path.endsWith('.pdf')),
+  [
+    'viewer/samples/inko-demo.pdf',
+    'viewer/samples/inko-feature-surface.pdf',
+  ],
+  'unapproved PDF entered the release package',
+)
 
 const rootPackage = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 const releasePackage = JSON.parse(readFileSync(resolve(release, 'package.json'), 'utf8'))
@@ -66,6 +74,7 @@ assert.equal(releasePackage.version, rootPackage.version)
 assert.equal(releasePackage.license, 'Apache-2.0')
 assert.notEqual(releasePackage.private, true)
 assert.equal(releasePackage.publishConfig?.access, 'public')
+assert.match(releasePackage.description ?? '', /host-managed storage/i)
 assert.match(
   JSON.stringify(releasePackage.repository ?? ''),
   /github\.com[/:]sinabin\/inko-sdk(?:\.git)?/i
@@ -100,6 +109,13 @@ for (const readmeName of ['README.md', 'README.ko.md']) {
 const sdk = readFileSync(resolve(release, 'sdk/inko-sdk.js'), 'utf8')
 assert.match(sdk, new RegExp(`version:\\s*['\"]${rootPackage.version.replaceAll('.', '\\.')}['\"]`))
 assert.doesNotMatch(sdk, /__bridgeMock|androidBridge|pdfv_canvas_history:/)
+
+const worker = readFileSync(resolve(release, 'viewer/pdf.worker.mjs'), 'utf8')
+assert.match(
+  worker,
+  /Modified by NextH for Inko in 2026: removed the upstream sourceMappingURL trailer\. No executable code was changed\./,
+  'PDF.js worker modification notice missing from the release package',
+)
 
 const example = readFileSync(resolve(release, 'example/index.html'), 'utf8')
 assert.match(example, /\.\.\/sdk\/inko-sdk\.js/)

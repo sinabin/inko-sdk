@@ -134,4 +134,54 @@ test.describe('applyConfig 커스터마이징 (SDK 경유)', () => {
     await expect(frame2.locator('[data-tool="contentSelect"]')).toHaveCount(0)
     await expect(frame2.locator('[data-tool="pen"]')).toHaveAttribute('title', 'Pen')
   })
+
+  test('③ 좁은 화면에서 브랜드 로고와 고정 액션이 서로 겹치지 않는다', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 })
+    await page.goto(EXAMPLE_URL)
+    const iframe = page.frameLocator('#viewer iframe')
+    await waitForViewerInsideIframe(iframe)
+
+    await applyConfig(page, {
+      theme: {
+        logoUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="140" height="26"%3E%3Crect width="140" height="26" fill="%230d1b3e"/%3E%3C/svg%3E'
+      }
+    })
+    await expect(iframe.locator('.toolbar-logo')).toBeVisible()
+
+    const layout = await iframe.locator('.toolbar').evaluate((element) => {
+      const toolbarRect = element.getBoundingClientRect()
+      const scroll = element.querySelector('.toolbar-scroll')!
+      const actionsRect = element.querySelector('.toolbar-actions')!.getBoundingClientRect()
+      const logo = element.querySelector('.toolbar-logo')!
+      return {
+        logoInsideScroll: logo.parentElement === scroll,
+        scrollWidth: scroll.getBoundingClientRect().width,
+        actionsInsideToolbar: actionsRect.left >= toolbarRect.left && actionsRect.right <= toolbarRect.right + 0.5
+      }
+    })
+
+    expect(layout.logoInsideScroll).toBe(true)
+    expect(layout.scrollWidth).toBeGreaterThan(0)
+    expect(layout.actionsInsideToolbar).toBe(true)
+  })
+
+  test('④ PDF가 없는 SDK 초기 상태에는 검색 트리거와 끊어진 ARIA 참조가 없다', async ({ page }) => {
+    await page.goto(EXAMPLE_URL)
+    await waitForViewerInsideIframe(page.frameLocator('#viewer iframe'))
+
+    await page.evaluate(() => {
+      const div = document.createElement('div')
+      div.id = 'empty-viewer'
+      div.style.height = '500px'
+      document.body.appendChild(div)
+      ;(window as any).__emptyViewer = (window as any).Inko.mount('#empty-viewer', {
+        src: '../index.html'
+      })
+    })
+
+    const emptyFrame = page.frameLocator('#empty-viewer iframe')
+    await expect(emptyFrame.locator('.pdf-viewer-container')).toBeVisible({ timeout: 15_000 })
+    await expect(emptyFrame.getByTestId('pdf-search-open')).toHaveCount(0)
+    await expect(emptyFrame.locator('[aria-controls="inko-pdf-search"]')).toHaveCount(0)
+  })
 })

@@ -20,6 +20,8 @@
  * JavaScript code in this page
  */
 
+/* Modified by NextH for Inko in 2026: removed the upstream sourceMappingURL trailer. No executable code was changed. */
+
 /**
  * pdfjsVersion = 5.4.624
  * pdfjsBuild = 384c6208b

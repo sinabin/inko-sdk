@@ -11,6 +11,8 @@
     currentTool: ToolMode
     currentPage: number
     totalPages: number
+    /** 실제 PDF 문서가 준비된 상태인지 여부 — totalPages의 이전 문서 잔존값과 분리 */
+    hasPdfDocument?: boolean
     scale: number
     isReadOnly?: boolean
     hasUserCanvasData?: boolean
@@ -43,6 +45,8 @@
     onOrientationToggle?: () => void
     hasSelection?: boolean
     onDeleteSelected?: () => void
+    isSearchOpen?: boolean
+    onToggleSearch?: () => void
     /** 노출할 도구 목록 (null = 전체). 'shape'는 사각형·원·선 일괄 */
     enabledTools?: string[] | null
     /** 툴바 기능 토글 — 미지정 키는 노출(on), false면 숨김 */
@@ -55,6 +59,7 @@
     currentTool = 'select',
     currentPage = 1,
     totalPages = 0,
+    hasPdfDocument = false,
     scale = 1,
     isReadOnly = false,
     hasUserCanvasData = false,
@@ -80,64 +85,81 @@
     onOrientationToggle,
     hasSelection = false,
     onDeleteSelected,
+    isSearchOpen = false,
+    onToggleSearch,
     enabledTools = null,
     features = {},
     logoUrl = ''
   }: Props = $props()
+
+  const showSearch = $derived(hasPdfDocument && features.search !== false)
+  const showHistory = $derived(hasUserCanvasData && features.history !== false)
+  const showSave = $derived(!isReadOnly && features.save !== false)
+  const showActions = $derived(showSearch || showHistory || showSave)
 </script>
 
 <div class="toolbar" role="toolbar" aria-label={t('toolbar.label')}>
-  {#if logoUrl}
-    <img class="toolbar-logo" src={logoUrl} alt="" style="height: 26px; width: auto; max-width: 140px; margin: 0 var(--space-2); flex-shrink: 0; object-fit: contain;" />
-  {/if}
+  <div class="toolbar-scroll">
+    {#if logoUrl}
+      <img class="toolbar-logo" src={logoUrl} alt="" style="height: 26px; width: auto; max-width: 140px; margin: 0 var(--space-2); flex-shrink: 0; object-fit: contain;" />
+    {/if}
 
-  <ToolbarNavigationGroup
-    {currentPage}
-    {totalPages}
-    {showThumbnails}
-    {isOutlinePanelVisible}
-    {hasOutline}
-    thumbnailsEnabled={features.thumbnails !== false}
-    bookmarksEnabled={features.bookmarks !== false}
-    pageNavEnabled={features.pageNav !== false}
-    {onPageChange}
-    {onToggleThumbnails}
-    {onToggleOutline}
-  />
-
-  {#if !isReadOnly && features.undoRedo !== false}
-    <ToolbarHistoryGroup {canUndo} {canRedo} {onUndo} {onRedo} />
-  {/if}
-
-  <ToolbarZoomGroup
-    {scale}
-    {orientation}
-    zoomEnabled={features.zoom !== false}
-    orientationEnabled={features.orientation !== false}
-    {onZoomIn}
-    {onZoomOut}
-    {onOrientationToggle}
-  />
-
-  {#if !isReadOnly}
-    <ToolbarToolGroup
-      {currentTool}
-      {hasSelection}
-      {enabledTools}
-      {onToolChange}
-      {onOpenPenOptions}
-      {onOpenToolOptions}
-      {onDeleteSelected}
+    <ToolbarNavigationGroup
+      {currentPage}
+      {totalPages}
+      {showThumbnails}
+      {isOutlinePanelVisible}
+      {hasOutline}
+      thumbnailsEnabled={features.thumbnails !== false}
+      bookmarksEnabled={features.bookmarks !== false}
+      pageNavEnabled={features.pageNav !== false}
+      {onPageChange}
+      {onToggleThumbnails}
+      {onToggleOutline}
     />
-  {/if}
 
-  <ToolbarActionGroup
-    showHistory={hasUserCanvasData && features.history !== false}
-    {isHistoryPanelVisible}
-    showSave={!isReadOnly && features.save !== false}
-    {onToggleHistory}
-    {onSave}
-  />
+    {#if !isReadOnly && features.undoRedo !== false}
+      <ToolbarHistoryGroup {canUndo} {canRedo} {onUndo} {onRedo} />
+    {/if}
+
+    <ToolbarZoomGroup
+      {scale}
+      {orientation}
+      zoomEnabled={features.zoom !== false}
+      orientationEnabled={features.orientation !== false}
+      {onZoomIn}
+      {onZoomOut}
+      {onOrientationToggle}
+    />
+
+    {#if !isReadOnly || enabledTools === null || enabledTools.includes('contentSelect')}
+      <ToolbarToolGroup
+        {currentTool}
+        {isReadOnly}
+        {hasSelection}
+        {enabledTools}
+        {onToolChange}
+        {onOpenPenOptions}
+        {onOpenToolOptions}
+        {onDeleteSelected}
+      />
+    {/if}
+  </div>
+
+  {#if showActions}
+    <div class="toolbar-actions">
+      <ToolbarActionGroup
+        {showSearch}
+        {isSearchOpen}
+        {showHistory}
+        {isHistoryPanelVisible}
+        {showSave}
+        {onToggleSearch}
+        {onToggleHistory}
+        {onSave}
+      />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -148,10 +170,37 @@
     padding: var(--space-2_5) var(--space-4);
     background: transparent;
     border-bottom: none;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     flex-shrink: 0;
     position: relative;
     z-index: 5;
+  }
+
+  .toolbar-scroll {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .toolbar-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbar-scroll :global(.inko-toolbar-button:focus-visible) {
+    outline-offset: -3px;
+    transition-property: background-color, border-color, box-shadow, color, transform, opacity;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
   }
 
   @media (orientation: portrait) {
@@ -159,12 +208,20 @@
       gap: var(--space-2);
       padding: var(--space-2) var(--space-3);
     }
+
+    .toolbar-scroll {
+      gap: var(--space-2);
+    }
   }
 
   @media (orientation: landscape) {
     .toolbar {
       gap: var(--space-2_5);
       padding: var(--space-1) var(--space-3);
+    }
+
+    .toolbar-scroll {
+      gap: var(--space-2_5);
     }
   }
 </style>

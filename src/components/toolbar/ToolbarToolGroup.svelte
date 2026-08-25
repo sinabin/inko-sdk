@@ -8,6 +8,7 @@
 
   interface Props {
     currentTool: ToolMode
+    isReadOnly?: boolean
     hasSelection: boolean
     enabledTools: string[] | null
     onToolChange?: (tool: ToolMode) => void
@@ -18,6 +19,7 @@
 
   let {
     currentTool,
+    isReadOnly = false,
     hasSelection,
     enabledTools,
     onToolChange,
@@ -28,6 +30,7 @@
 
   const tools: { id: ToolMode; labelKey: string }[] = [
     { id: 'select', labelKey: 'tool.select' },
+    { id: 'contentSelect', labelKey: 'tool.contentSelect' },
     { id: 'pen', labelKey: 'tool.pen' },
     { id: 'highlighter', labelKey: 'tool.highlighter' },
     { id: 'eraser', labelKey: 'tool.eraser' },
@@ -38,10 +41,17 @@
   ]
   const SHAPE_IDS: ToolMode[] = ['rectangle', 'circle', 'line']
   const visibleTools = $derived(
-    !enabledTools
-      ? tools
-      : tools.filter(tool => enabledTools.includes(tool.id) || (SHAPE_IDS.includes(tool.id) && enabledTools.includes('shape')))
+    tools.filter(tool => {
+      if (isReadOnly && tool.id !== 'contentSelect') return false
+      return !enabledTools
+        || enabledTools.includes(tool.id)
+        || (SHAPE_IDS.includes(tool.id) && enabledTools.includes('shape'))
+    })
   )
+
+  function isToolActive(tool: ToolMode): boolean {
+    return currentTool === tool || (isReadOnly && tool === 'contentSelect')
+  }
 
   /** 도구 → 옵션 시트 종류 매핑 */
   function getSheetKind(tool: ToolMode): ToolOptionKind | null {
@@ -79,18 +89,23 @@
     <button
       type="button"
       class="btn inko-toolbar-button tool-btn"
-      class:active={currentTool === tool.id}
+      class:active={isToolActive(tool.id)}
       class:has-options={getSheetKind(tool.id) !== null}
       onclick={(event) => handleToolClick(tool.id, event.currentTarget as HTMLButtonElement)}
       title={t(tool.labelKey)}
       aria-label={t(tool.labelKey)}
-      aria-pressed={currentTool === tool.id}
+      aria-pressed={isToolActive(tool.id)}
       aria-haspopup={getSheetKind(tool.id) !== null ? 'dialog' : undefined}
       data-tool={tool.id}
     >
       {#if tool.id === 'select'}
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" fill="currentColor" fill-opacity="0.18"/>
+        </svg>
+      {:else if tool.id === 'contentSelect'}
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 5h10M10 5v14M6.5 19h7"/>
+          <path d="M15 12l5 2.2-2.1 1.1 1.2 2.8-2.1.9-1.2-2.8-2.2.8z" fill="currentColor" fill-opacity="0.18"/>
         </svg>
       {:else if tool.id === 'pen'}
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

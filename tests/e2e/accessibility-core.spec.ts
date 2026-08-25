@@ -60,16 +60,16 @@ test.describe('production 핵심 접근성 자동 검증', () => {
     await waitForFirstPageRender(page)
 
     const toolbar = page.getByRole('toolbar', { name: 'PDF 도구 모음' })
-    const nativeControls = page.getByRole('group', { name: 'PDF 내용 도구' })
     const documentRegion = page.getByRole('region', { name: 'PDF 문서 보기 영역' })
     await expect(toolbar).toBeVisible()
-    await expect(nativeControls).toBeVisible()
+    await expect(toolbar.getByRole('button', { name: 'PDF 내용 선택' })).toBeVisible()
+    await expect(toolbar.getByRole('button', { name: 'PDF 검색' })).toBeVisible()
+    await expect(page.locator('.pdf-native-controls')).toHaveCount(0)
     await expect(documentRegion).toBeVisible()
     await expect(documentRegion).toHaveAttribute('tabindex', '0')
     await expectNoViolations(
       new AxeBuilder({ page })
         .include('[role="toolbar"]')
-        .include('.pdf-native-controls')
         .include('.scroll-viewer'),
       testInfo,
       'viewer-shell'

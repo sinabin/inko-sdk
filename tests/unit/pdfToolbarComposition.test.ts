@@ -18,6 +18,7 @@ function baseProps(): Record<string, unknown> {
     currentTool: 'select',
     currentPage: 2,
     totalPages: 5,
+    hasPdfDocument: true,
     scale: 1.25
   }
 }
@@ -43,6 +44,7 @@ describe('PdfToolbar 그룹 조합', () => {
       onToolChange: vi.fn(),
       onOpenToolOptions: vi.fn(),
       onDeleteSelected: vi.fn(),
+      onToggleSearch: vi.fn(),
       onToggleHistory: vi.fn(),
       onSave: vi.fn()
     }
@@ -58,9 +60,10 @@ describe('PdfToolbar 그룹 조합', () => {
     })
 
     expect(el.querySelector('.toolbar-logo')).not.toBeNull()
-    expect(el.querySelectorAll('.toolbar > .toolbar-section')).toHaveLength(5)
-    expect(el.querySelectorAll('.toolbar > .inko-toolbar-section')).toHaveLength(5)
-    expect(el.querySelectorAll('.toolbar > .inko-toolbar-section--divided')).toHaveLength(3)
+    expect(el.querySelectorAll('.toolbar-scroll > .toolbar-section')).toHaveLength(4)
+    expect(el.querySelectorAll('.toolbar-actions > .toolbar-section')).toHaveLength(1)
+    expect(el.querySelectorAll('.toolbar .inko-toolbar-section')).toHaveLength(5)
+    expect(el.querySelectorAll('.toolbar .inko-toolbar-section--divided')).toHaveLength(4)
     expect(el.querySelectorAll('.toolbar .btn')).toHaveLength(
       el.querySelectorAll('.toolbar .inko-toolbar-button').length
     )
@@ -68,7 +71,7 @@ describe('PdfToolbar 그룹 조합', () => {
     expect(el.querySelector('.page-info .page-input')).not.toBeNull()
     expect(el.querySelector('.toolbar-section.actions')).not.toBeNull()
     expect(Array.from(el.querySelectorAll<HTMLElement>('.tool-btn[data-tool]'), tool => tool.dataset.tool)).toEqual([
-      'select', 'pen', 'highlighter', 'eraser', 'text', 'rectangle', 'circle', 'line'
+      'select', 'contentSelect', 'pen', 'highlighter', 'eraser', 'text', 'rectangle', 'circle', 'line'
     ])
     el.querySelector<HTMLButtonElement>('.thumbnail-toggle-btn')!.click()
     el.querySelector<HTMLButtonElement>('.outline-toggle-btn')!.click()
@@ -81,6 +84,7 @@ describe('PdfToolbar 그룹 조합', () => {
     el.querySelector<HTMLButtonElement>('.orientation-btn')!.click()
     el.querySelector<HTMLButtonElement>('[data-tool="pen"]')!.click()
     el.querySelector<HTMLButtonElement>('.delete-btn')!.click()
+    el.querySelector<HTMLButtonElement>('.search-btn')!.click()
     el.querySelector<HTMLButtonElement>('.history-btn')!.click()
     el.querySelector<HTMLButtonElement>('.save-btn')!.click()
 
@@ -95,6 +99,7 @@ describe('PdfToolbar 그룹 조합', () => {
     expect(callbacks.onToolChange).toHaveBeenCalledWith('pen')
     expect(callbacks.onOpenToolOptions).toHaveBeenCalledWith('pen', 0, 4)
     expect(callbacks.onDeleteSelected).toHaveBeenCalledOnce()
+    expect(callbacks.onToggleSearch).toHaveBeenCalledOnce()
     expect(callbacks.onToggleHistory).toHaveBeenCalledOnce()
     expect(callbacks.onSave).toHaveBeenCalledOnce()
   })
@@ -116,13 +121,39 @@ describe('PdfToolbar 그룹 조합', () => {
       }
     })
 
-    expect(el.querySelectorAll('.toolbar > .toolbar-section')).toHaveLength(3)
+    expect(el.querySelectorAll('.toolbar-scroll > .toolbar-section')).toHaveLength(3)
+    expect(el.querySelectorAll('.toolbar-actions > .toolbar-section')).toHaveLength(1)
     expect(el.querySelector('.history-section')).toBeNull()
-    expect(el.querySelector('.tools')).toBeNull()
+    expect(Array.from(el.querySelectorAll<HTMLElement>('.tool-btn[data-tool]'), tool => tool.dataset.tool)).toEqual([
+      'contentSelect'
+    ])
     expect(el.querySelector('.outline-toggle-btn')).toBeNull()
     expect(el.querySelector('.history-btn')).toBeNull()
     expect(el.querySelector('.save-btn')).toBeNull()
     expect(el.querySelector<HTMLElement>('.thumbnail-toggle-btn')!.style.display).toBe('none')
     expect(el.querySelector<HTMLElement>('.zoom-info')!.style.display).toBe('none')
+  })
+
+  it('PDF가 준비되기 전에는 검색 트리거를 노출하지 않는다', () => {
+    const el = render({
+      ...baseProps(),
+      hasPdfDocument: false
+    })
+
+    expect(el.querySelector('[data-testid="pdf-search-open"]')).toBeNull()
+    expect(el.querySelector('[aria-controls="inko-pdf-search"]')).toBeNull()
+  })
+
+  it('표시할 액션이 없으면 빈 액션 그룹을 남기지 않는다', () => {
+    const el = render({
+      ...baseProps(),
+      hasPdfDocument: false,
+      isReadOnly: true,
+      hasUserCanvasData: false,
+      features: { search: false, history: false, save: false }
+    })
+
+    expect(el.querySelector('.toolbar-actions')).toBeNull()
+    expect(el.querySelector('[aria-label="PDF 작업"]')).toBeNull()
   })
 })
