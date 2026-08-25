@@ -42,6 +42,56 @@ authorization, version numbering, append-only storage, backup, retention,
 audit logs, Git diff/merge/branch features, or a collaboration backend. Those
 belong to the host application.
 
+## Why Inko instead of PDF.js's built-in annotation editor?
+
+Inko is built **on** PDF.js and uses its public `TextLayerBuilder` and
+`AnnotationLayerBuilder`. PDF.js also ships its own `AnnotationEditorLayer`
+(ink, highlight, free text, stamp). If that covers your case, use it — it is
+already in your bundle and Inko is not trying to replace it.
+
+The two solve different storage problems.
+
+| | PDF.js `AnnotationEditorLayer` | Inko |
+| --- | --- | --- |
+| Where edits live | Inside the PDF, as native annotations | In a separate `canvasData` string your app stores |
+| Original PDF bytes | Rewritten on `saveDocument()` | Left untouched |
+| Number of simultaneous states | One — the document's own annotation set | Many, overlaid and toggled independently |
+| Comparing two reviewers' markup | Open two files | `loadUserCanvasOverlay()` in one view |
+| Resuming from a chosen past state | Not modeled | `isCurrent` selection, then continue editing |
+| Interop with Acrobat/Chrome viewer | Native, immediate | Only after `exportFlattenedPdf()` |
+
+The distinction that matters: **PDF.js's editor makes the PDF the system of
+record. Inko keeps your database the system of record and leaves the PDF as an
+immutable input.** If five reviewers each mark up the same contract, PDF.js
+gives you five PDFs. Inko gives you one PDF and five `canvasData` rows you can
+overlay, diff visually, and resume from.
+
+Inko does not force the choice. It also renders PDF.js native annotations and
+AcroForm fields, and `exportPdf()` returns `saveDocument()` bytes with current
+form values.
+
+**Choose PDF.js's editor when** annotations should travel with the file, one
+annotation set per document is enough, and Acrobat interoperability is the
+priority.
+
+**Choose Inko when** review state belongs in your own storage next to
+permissions and versioning, several reviewers' markup must be visible at once,
+and editing must resume from a state your application selects.
+
+### When Inko is the wrong choice
+
+Be aware of these limits before adopting:
+
+- **Digital signatures, certification, and redaction are not implemented.** Use
+  a commercial SDK if these are requirements.
+- **Inko drawings are not PDF-standard annotations** until you call
+  `exportFlattenedPdf()`, which burns them into page content and is not
+  reversible.
+- **There is no backend.** Storage, authentication, authorization, version
+  numbering, retention, and audit logging are yours to build.
+- **There is no support contract.** No SLA, no LTS, no guaranteed response time.
+  Issues and pull requests are handled on a best-effort basis.
+
 ## Install
 
 ```bash
